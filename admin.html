@@ -1,0 +1,882 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STRICTWALLET — Administrator Management Console</title>
+  <meta name="description" content="STRICTWALLET Master Administrative Dashboard for managing users, transactions, pricing, and support.">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="Image.png">
+  <link rel="apple-touch-icon" href="Image.png">
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Chart.js for Admin Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ================= 1. ADMIN LOGIN VIEW ================= -->
+  <div id="adminAuthWrapper" class="auth-wrapper">
+    <div class="auth-card" style="border-top: 4px solid var(--accent-emerald);">
+      <div class="auth-header">
+        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <h2>Administrator Portal</h2>
+        <p class="auth-tagline">Authorized Personnel Access Only</p>
+      </div>
+
+      <form id="adminLoginForm">
+        <div class="form-group">
+          <label class="form-label" for="adminEmail">Administrator Email</label>
+          <input type="email" id="adminEmail" placeholder="admin@strictwallet.com" autocomplete="email" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="adminPassword">Master Password</label>
+          <div style="position: relative;">
+            <input type="password" id="adminPassword" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" id="toggleAdminPass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: transparent; color: var(--text-muted);">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="adminLoginBtn" class="btn btn-primary btn-block" style="margin-top: 24px;">
+          <i class="fa-solid fa-shield-halved"></i> Authenticate & Enter Console
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 24px; font-size: 0.82rem; color: var(--text-muted);">
+        STRICTWALLET Master Control Gateway
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 2. ADMIN DASHBOARD CONSOLE ================= -->
+  <div id="adminAppContainer" class="app-container" style="display: none;">
+    
+    <!-- Admin Sidebar -->
+    <aside class="sidebar" id="adminSidebar">
+      <div class="sidebar-header">
+        <img src="Image.png" alt="STRICTWALLET" class="brand-logo">
+        <span class="brand-title">STRICTWALLET</span>
+        <span class="brand-badge" style="background: rgba(37, 99, 235, 0.2); color: var(--accent-blue-light); border-color: rgba(37, 99, 235, 0.4);">
+          ADMIN
+        </span>
+      </div>
+
+      <nav class="sidebar-menu">
+        <div class="nav-item active" data-admin-view="viewAdminOverview">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Overview & Analytics</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminUsers">
+          <i class="fa-solid fa-users"></i>
+          <span>User Management</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminTransactions">
+          <i class="fa-solid fa-receipt"></i>
+          <span>Transaction Ledger</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminPricing">
+          <i class="fa-solid fa-tags"></i>
+          <span>Pricing & Profit</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminSupport">
+          <i class="fa-solid fa-headset"></i>
+          <span>Support Desk</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminLogs">
+          <i class="fa-solid fa-clock-rotate-left"></i>
+          <span>Audit Logs</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminSocial">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>Social Media</span>
+        </div>
+        <div class="nav-item" id="btnAdminLogout" style="color: var(--status-error); margin-top: auto;">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Exit Admin</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-mini-card">
+          <div class="user-avatar" style="background: linear-gradient(135deg, #2563EB 0%, #8B5CF6 100%); color: #FFF;">A</div>
+          <div class="user-info">
+            <div class="user-name">Administrator</div>
+            <div class="user-email" id="adminProfileEmail">admin@strictwallet.com</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Admin Main Wrapper -->
+    <div class="main-wrapper">
+      
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-toggle-btn" id="adminMobileToggle">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <h1 class="page-headline" id="adminPageHeadline">Overview & Analytics</h1>
+        </div>
+
+        <div class="topbar-right">
+          <span class="badge badge-success" style="padding: 6px 12px; font-size: 0.8rem;">
+            <i class="fa-solid fa-circle-check"></i> System Operational
+          </span>
+          <button class="btn btn-outline btn-sm" id="btnRefreshAdminData">
+            <i class="fa-solid fa-rotate"></i> Refresh
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Body -->
+      <main class="content-body">
+
+        <!-- ================= 1. OVERVIEW & ANALYTICS ================= -->
+        <section id="viewAdminOverview" class="view-section active-view">
+          
+          <!-- Key Metrics Grid -->
+          <div class="grid-cards-4">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminTotalUsers">0</div>
+                  <div class="card-subtitle">Registered Users</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-users"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminTotalDeposits">₦0.00</div>
+                  <div class="card-subtitle">Total Verified Deposits</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-building-columns"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminTotalRevenue">₦0.00</div>
+                  <div class="card-subtitle">Total Sales Volume</div>
+                </div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-chart-line"></i></div>
+              </div>
+            </div>
+
+            <div class="card" style="border-color: rgba(0, 208, 156, 0.4); background: linear-gradient(135deg, rgba(0, 208, 156, 0.08) 0%, rgba(13, 21, 45, 0.8) 100%);">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminTotalProfit" style="color: var(--accent-emerald);">₦0.00</div>
+                  <div class="card-subtitle">Total Net Profit</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-sack-dollar"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Secondary Metrics -->
+          <div class="grid-cards-4" style="margin-bottom: 28px;">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminAirtimeSales">₦0.00</div>
+                  <div class="card-subtitle">Airtime Sales</div>
+                </div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-mobile-screen-button"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminDataSales">₦0.00</div>
+                  <div class="card-subtitle">Data Bundle Sales</div>
+                </div>
+                <div class="card-icon-badge purple"><i class="fa-solid fa-wifi"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminTotalTx">0</div>
+                  <div class="card-subtitle">Total Transactions</div>
+                </div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-receipt"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAdminOpenTickets">0</div>
+                  <div class="card-subtitle">Pending Support Tickets</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-headset"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Financial Performance Chart -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">7-Day Financial Performance</h3>
+                <p class="card-subtitle">Daily sales revenue and net platform profit</p>
+              </div>
+            </div>
+            <div style="height: 320px; width: 100%;">
+              <canvas id="adminSalesChart"></canvas>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ================= 2. USER MANAGEMENT ================= -->
+        <section id="viewAdminUsers" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Platform Registered Users</h2>
+                <p class="card-subtitle">Search, inspect wallets, suspend/activate accounts</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="adminUserSearch" placeholder="Search by name, email, account..." style="width: 260px; padding: 8px 14px;">
+                <select id="adminUserStatusFilter" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Statuses</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>User Details</th>
+                    <th>Phone</th>
+                    <th>Virtual Bank & Account</th>
+                    <th>Wallet Balance</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminUsersTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 3. TRANSACTION LEDGER ================= -->
+        <section id="viewAdminTransactions" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Master Financial Ledger</h2>
+                <p class="card-subtitle">Detailed breakdown of cost, selling price, and profit per transaction</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="adminTxSearch" placeholder="Search User, ID, Ref, Phone..." style="width: 260px; padding: 8px 14px;">
+                <select id="adminTxTypeFilter" style="width: 130px; padding: 8px 12px;">
+                  <option value="all">All Types</option>
+                  <option value="deposit">Deposits</option>
+                  <option value="airtime">Airtime</option>
+                  <option value="data">Data</option>
+                </select>
+                <select id="adminTxStatusFilter" style="width: 130px; padding: 8px 12px;">
+                  <option value="all">All Status</option>
+                  <option value="Successful">Successful</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Failed">Failed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Tx ID</th>
+                    <th>User</th>
+                    <th>Type / Network</th>
+                    <th>Recipient</th>
+                    <th>Cost Price</th>
+                    <th>Selling Price</th>
+                    <th>Profit</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="adminTransactionsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 4. PRICING & PROFIT MANAGEMENT ================= -->
+        <section id="viewAdminPricing" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Data Plans & Reselling Price Management</h2>
+                <p class="card-subtitle">Configure Plan IDs, API provider costs, consumer selling prices, and profit margins</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <input type="text" id="adminPlanSearch" placeholder="Search plan name, ID, network, type..." style="width: 240px; padding: 8px 14px;">
+                <select id="adminPlanNetworkFilter" style="width: 130px; padding: 8px 12px;">
+                  <option value="all">All Networks</option>
+                  <option value="MTN">MTN</option>
+                  <option value="GLO">GLO</option>
+                  <option value="AIRTEL">AIRTEL</option>
+                  <option value="9MOBILE">9MOBILE</option>
+                </select>
+                <select id="adminPlanTypeFilter" style="width: 150px; padding: 8px 12px;">
+                  <option value="all">All Plan Types</option>
+                  <option value="SME">SME</option>
+                  <option value="SME2">SME2</option>
+                  <option value="GIFTING">GIFTING</option>
+                  <option value="CORPORATE GIFTING">CORPORATE GIFTING</option>
+                  <option value="CORPORATE GIFTING 2">CORPORATE GIFTING 2</option>
+                  <option value="DATA AWOOF">DATA AWOOF</option>
+                  <option value="DATA COUPONS">DATA COUPONS</option>
+                  <option value="DATA SHARE">DATA SHARE</option>
+                </select>
+                <select id="adminPlanStatusFilter" style="width: 120px; padding: 8px 12px;">
+                  <option value="all">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Suspended</option>
+                </select>
+                <button class="btn btn-primary btn-sm" id="btnOpenAddPlanModal" style="padding: 8px 14px;">
+                  <i class="fa-solid fa-plus"></i> Add Plan
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Network</th>
+                    <th>Type</th>
+                    <th>Plan</th>
+                    <th>Plan ID</th>
+                    <th>Provider Price</th>
+                    <th>Selling Price</th>
+                    <th>Profit</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminPricingTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 5. SUPPORT TICKETS MANAGEMENT ================= -->
+        <section id="viewAdminSupport" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Customer Care Help Desk</h2>
+                <p class="card-subtitle">Manage customer queries, reply in real-time, resolve issues</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="adminSupportSearch" placeholder="Search ticket # or user..." style="width: 240px; padding: 8px 14px;">
+                <select id="adminSupportStatusFilter" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Status</option>
+                  <option value="Open">Open</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Resolved">Resolved</option>
+                  <option value="Closed">Closed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Ticket #</th>
+                    <th>Customer</th>
+                    <th>Subject</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminSupportTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 6. AUDIT LOGS ================= -->
+        <section id="viewAdminLogs" class="view-section">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Administrator Audit Trail</h2>
+                <p class="card-subtitle">Immutable log of price changes, status toggles, and manual balance adjustments</p>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Admin</th>
+                    <th>Action</th>
+                    <th>Description</th>
+                  </tr>
+                </thead>
+                <tbody id="adminAuditLogsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 7. SOCIAL MEDIA MANAGEMENT ================= -->
+        <section id="viewAdminSocial" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Social Media & Community Channels</h2>
+                <p class="card-subtitle">Manage official social links, community groups, and follow buttons for users</p>
+              </div>
+
+              <button class="btn btn-primary btn-sm" id="btnOpenAddSocialModal" style="padding: 8px 16px;">
+                <i class="fa-solid fa-plus"></i> Add Platform
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Platform</th>
+                    <th>Display Name</th>
+                    <th>Action Label</th>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminSocialTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <div>© 2026 STRICTWALLET. All rights reserved.</div>
+        <div>STRICTWALLET Admin Core v1.0.0</div>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- ================= ADMIN MODALS ================= -->
+
+  <!-- 1. ADJUST WALLET BALANCE MODAL -->
+  <div id="adminBalanceModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="card-title">Manual Balance Adjustment</h3>
+        <button class="modal-close-btn" onclick="closeModal('adminBalanceModal')">&times;</button>
+      </div>
+      <form id="adminBalanceForm">
+        <div class="modal-body">
+          <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 18px;">
+            <div style="color: var(--text-muted); font-size: 0.8rem;">Target User:</div>
+            <strong id="adjUserName" style="color: #FFF; font-size: 1rem; display: block;">User Name</strong>
+            <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 6px;">Current Balance:</div>
+            <strong id="adjUserBalance" style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.1rem;">₦0.00</strong>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Adjustment Type</label>
+            <select id="adjType" required>
+              <option value="credit">Credit User Wallet (+)</option>
+              <option value="debit">Debit User Wallet (-)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="adjAmount">Amount (₦)</label>
+            <input type="number" id="adjAmount" placeholder="e.g. 5000" min="1" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="adjReason">Mandatory Administrative Reason</label>
+            <textarea id="adjReason" rows="3" placeholder="Reason for adjustment (e.g. Direct bank transfer resolution, refund)" required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('adminBalanceModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-check"></i> Execute Balance Adjustment
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. EDIT PRICING & PLAN MODAL -->
+  <div id="adminEditPriceModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title">Edit Data Plan Details & Pricing</h3>
+          <p class="card-subtitle" id="editPlanSubtitle">Modify plan configurations, provider ID, or consumer selling price</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('adminEditPriceModal')">&times;</button>
+      </div>
+      <form id="adminEditPriceForm">
+        <div class="modal-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="editPlanNetwork">Network</label>
+              <select id="editPlanNetwork" required>
+                <option value="MTN">MTN</option>
+                <option value="GLO">GLO</option>
+                <option value="AIRTEL">AIRTEL</option>
+                <option value="9MOBILE">9MOBILE</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="editPlanType">Plan Type</label>
+              <input type="text" id="editPlanType" placeholder="e.g. SME, GIFTING, CORPORATE GIFTING" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="editPlanSize">Data Volume / Size</label>
+              <input type="text" id="editPlanSize" placeholder="e.g. 1.0 GB or 500.0 MB" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="editPlanName">Display Plan Name</label>
+              <input type="text" id="editPlanNameInput" placeholder="e.g. 1.0 GB SME" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="editPlanIdInput">
+                API Provider Plan ID 
+                <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: normal;">(MaskawaSub ID)</span>
+              </label>
+              <input type="text" id="editPlanIdInput" placeholder="e.g. 235" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="editPlanValidity">Validity / Duration</label>
+              <input type="text" id="editPlanValidity" placeholder="e.g. 30 Days or 7 Days" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="editPlanCostPrice">
+                API Provider Cost Price (₦)
+                <span style="font-size: 0.72rem; color: #38BDF8; font-weight: normal;">(Cost Charged by API)</span>
+              </label>
+              <input type="number" id="editPlanCostPrice" step="any" min="0" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="editSellingPrice">
+                STRICTWALLET Reselling Price (₦)
+                <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: normal;">(User Pays This)</span>
+              </label>
+              <input type="number" id="editSellingPrice" step="any" min="0" required>
+            </div>
+          </div>
+
+          <!-- Real-Time Profit Calculation Banner -->
+          <div style="background: rgba(0, 208, 156, 0.08); border: 1px solid rgba(0, 208, 156, 0.3); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Expected Net Profit:</span>
+              <strong id="editProfitPreview" style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.15rem;">+₦0.00</strong>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Profit = Selling Price − Provider Cost</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="editPlanStatus">Availability Status</label>
+            <select id="editPlanStatus" required>
+              <option value="active">Active (Visible & Available for purchase)</option>
+              <option value="inactive">Suspended / Inactive (Blocked from purchase)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer" style="justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" class="btn btn-outline btn-sm" id="btnResetPlanDefault" style="color: #F59E0B; border-color: rgba(245, 158, 11, 0.4);">
+              <i class="fa-solid fa-rotate-left"></i> Revert to Default
+            </button>
+            <button type="button" class="btn btn-danger btn-sm" id="btnDeletePlanFromModal">
+              <i class="fa-solid fa-trash"></i> Delete Plan
+            </button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('adminEditPriceModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary">
+              <i class="fa-solid fa-floppy-disk"></i> Save Plan Changes
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. ADD NEW DATA PLAN MODAL -->
+  <div id="adminAddPlanModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title">Add New Data Plan</h3>
+          <p class="card-subtitle">Introduce a new data bundle package to the platform</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('adminAddPlanModal')">&times;</button>
+      </div>
+      <form id="adminAddPlanForm">
+        <div class="modal-body">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="addPlanNetwork">Network</label>
+              <select id="addPlanNetwork" required>
+                <option value="MTN">MTN</option>
+                <option value="GLO">GLO</option>
+                <option value="AIRTEL">AIRTEL</option>
+                <option value="9MOBILE">9MOBILE</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="addPlanType">Plan Type</label>
+              <input type="text" id="addPlanType" placeholder="e.g. SME, SME2, GIFTING, CORPORATE GIFTING" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="addPlanSize">Data Volume / Size</label>
+              <input type="text" id="addPlanSize" placeholder="e.g. 2.0 GB or 500.0 MB" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="addPlanName">Display Name</label>
+              <input type="text" id="addPlanName" placeholder="e.g. 2.0 GB SME" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="addPlanIdInput">
+                API Provider Plan ID
+                <span style="font-size: 0.72rem; color: var(--accent-emerald);">(MaskawaSub ID)</span>
+              </label>
+              <input type="text" id="addPlanIdInput" placeholder="e.g. 542" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="addPlanValidity">Validity / Duration</label>
+              <input type="text" id="addPlanValidity" placeholder="e.g. 30 Days or 7 Days" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="addPlanCostPrice">API Provider Cost Price (₦)</label>
+              <input type="number" id="addPlanCostPrice" step="any" min="0" placeholder="e.g. 550" required>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="addSellingPrice">STRICTWALLET Selling Price (₦)</label>
+              <input type="number" id="addSellingPrice" step="any" min="0" placeholder="e.g. 650" required>
+            </div>
+          </div>
+
+          <!-- Real-Time Profit Calculation Banner -->
+          <div style="background: rgba(0, 208, 156, 0.08); border: 1px solid rgba(0, 208, 156, 0.3); border-radius: var(--radius-md); padding: 12px 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span style="font-size: 0.8rem; color: var(--text-secondary); display: block;">Expected Net Profit:</span>
+              <strong id="addProfitPreview" style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.15rem;">+₦0.00</strong>
+            </div>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Profit = Selling Price − Provider Cost</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="addPlanStatus">Initial Status</label>
+            <select id="addPlanStatus" required>
+              <option value="active">Active (Immediately available for purchase)</option>
+              <option value="inactive">Suspended (Saved as unavailable)</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('adminAddPlanModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-plus"></i> Create Data Plan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. ADMIN CHAT TICKET MODAL -->
+  <div id="adminTicketModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 650px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title" id="admChatTicketNumber">Ticket #SW-2026-000000</h3>
+          <p class="card-subtitle" id="admChatTicketSubject">Subject</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('adminTicketModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 8px; margin-bottom: 14px; align-items: center; justify-content: space-between;">
+          <div style="font-size: 0.85rem; color: var(--text-secondary);">
+            Customer: <strong id="admChatCustomerName" style="color: #FFF;">User Name</strong>
+          </div>
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-sm btn-outline" id="btnMarkTicketResolved">
+              <i class="fa-solid fa-circle-check"></i> Mark Resolved
+            </button>
+            <button class="btn btn-sm btn-secondary" id="btnMarkTicketClosed">
+              <i class="fa-solid fa-lock"></i> Close Ticket
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-container" id="adminTicketChatContainer">
+          <!-- Chat thread injected by JS -->
+        </div>
+
+        <form id="adminTicketReplyForm" style="display: flex; gap: 8px; margin-top: 14px;">
+          <input type="text" id="adminTicketReplyInput" placeholder="Type administrator reply to customer..." required>
+          <button type="submit" class="btn btn-primary" style="padding: 0 20px;">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. ADD / EDIT SOCIAL LINK MODAL -->
+  <div id="adminSocialModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 540px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title" id="adminSocialModalTitle">Add Social Media Channel</h3>
+          <p class="card-subtitle">Configure an official brand channel displayed on the user interface</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('adminSocialModal')">&times;</button>
+      </div>
+      <form id="adminSocialForm">
+        <input type="hidden" id="socialEditId" value="">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="socialPlatform">Platform</label>
+            <select id="socialPlatform" required>
+              <option value="WhatsApp">WhatsApp</option>
+              <option value="Telegram">Telegram</option>
+              <option value="X/Twitter">X (formerly Twitter)</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Facebook">Facebook</option>
+              <option value="YouTube">YouTube</option>
+              <option value="TikTok">TikTok</option>
+              <option value="LinkedIn">LinkedIn</option>
+              <option value="Discord">Discord</option>
+              <option value="Other">Other Custom Platform</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="socialName">Display Title / Name</label>
+            <input type="text" id="socialName" placeholder="e.g. Official WhatsApp Support or Join Telegram Community" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="socialActionText">Call to Action (Button Text)</label>
+            <input type="text" id="socialActionText" placeholder="e.g. Chat with Us, Follow Us, Join Channel" value="Follow Us" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="socialUrl">Destination Link (URL)</label>
+            <input type="url" id="socialUrl" placeholder="https://..." required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="socialOrder">Priority Order</label>
+              <input type="number" id="socialOrder" value="1" min="1">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="socialStatus">Visibility Status</label>
+              <select id="socialStatus">
+                <option value="true">Enabled (Visible to users)</option>
+                <option value="false">Disabled (Hidden from users)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('adminSocialModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSaveSocialLink">
+            <i class="fa-solid fa-floppy-disk"></i> Save Channel
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin JavaScript Logic -->
+  <script src="admin.js"></script>
+</body>
+</html>

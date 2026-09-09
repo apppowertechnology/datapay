@@ -1,0 +1,26 @@
+{
+  "name": "STRICTWALLET — Digital VTU & Fintech",
+  "short_name": "STRICTWALLET",
+  "description": "Premium Digital Fintech Wallet Platform for Instant Data Bundles, Airtime & Bill Payments",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#060B19",
+  "theme_color": "#00D09C",
+  "icons": [
+    {
+      "src": "/Image.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/Image.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["finance", "utilities", "shopping"]
+}

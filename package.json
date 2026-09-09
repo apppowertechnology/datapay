@@ -1,0 +1,33 @@
+{
+  "name": "strictwallet",
+  "version": "1.0.0",
+  "description": "STRICTWALLET - Premium Digital Fintech Wallet Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "fintech",
+    "wallet",
+    "airtime",
+    "data",
+    "strowallet",
+    "maskawasub"
+  ],
+  "author": "STRICTWALLET Team",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^14.3.0",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0"
+  }
+}

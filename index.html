@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>STRICTWALLET — Accessible. Secure. In Control.</title>
+  <meta name="description" content="STRICTWALLET is a digital wallet platform for airtime purchase, data bundles, dedicated virtual bank accounts, and seamless automated funding.">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="Image.png">
+  <link rel="apple-touch-icon" href="Image.png">
+
+  <!-- Google Fonts & FontAwesome -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- PWA Web App Manifest & Mobile Meta -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#00D09C">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="STRICTWALLET">
+  <meta name="application-name" content="STRICTWALLET">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- ================= AUTHENTICATION MODALS / VIEWS ================= -->
+  <div id="authWrapper" class="auth-wrapper">
+    
+    <!-- 1. LOGIN CARD -->
+    <div id="loginCard" class="auth-card">
+      <div class="auth-header">
+        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <h2>Welcome Back</h2>
+        <p class="auth-tagline">Accessible. Secure. In Control.</p>
+      </div>
+
+      <form id="loginForm">
+        <div class="form-group">
+          <label class="form-label" for="loginEmail">Email Address</label>
+          <input type="email" id="loginEmail" placeholder="e.g. yourname@example.com" required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label" for="loginPassword" style="margin-bottom: 0;">Password</label>
+            <a href="#" id="toForgotPasswordLink" style="font-size: 0.78rem;">Forgot Password?</a>
+          </div>
+          <div style="position: relative;">
+            <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+            <button type="button" id="toggleLoginPass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: transparent; color: var(--text-muted);">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer;">
+            <input type="checkbox" id="rememberMe" style="width: auto;"> Remember me
+          </label>
+        </div>
+
+        <button type="submit" id="loginSubmitBtn" class="btn btn-primary btn-block">
+          <i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In to STRICTWALLET
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 24px; font-size: 0.86rem; color: var(--text-muted);">
+        Don't have an account yet? <a href="#" id="toRegisterLink" style="font-weight: 700;">Create Account</a>
+      </div>
+    </div>
+
+    <!-- 2. REGISTRATION CARD -->
+    <div id="registerCard" class="auth-card" style="display: none; max-width: 540px;">
+      <div class="auth-header">
+        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <h2>Create STRICTWALLET Account</h2>
+        <p class="auth-tagline">Open your dedicated funding account & wallet</p>
+      </div>
+
+      <form id="registerForm">
+        <div class="form-group">
+          <label class="form-label" for="regFullName">Full Name</label>
+          <input type="text" id="regFullName" placeholder="e.g. Chukwuemeka Adeyemi" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="regEmail">Email Address</label>
+            <input type="email" id="regEmail" placeholder="you@email.com" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regPhone">Phone Number</label>
+            <input type="tel" id="regPhone" placeholder="08012345678" required>
+          </div>
+        </div>
+
+        <!-- Next of Kin (Recovery Question) -->
+        <div class="form-group" style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.2); padding: 14px; border-radius: var(--radius-md);">
+          <label class="form-label" for="regNextOfKin" style="color: var(--accent-blue-light); display: flex; align-items: center; gap: 6px;">
+            <i class="fa-solid fa-shield-halved"></i> Security Question: What is the name of your next of kin?
+          </label>
+          <input type="text" id="regNextOfKin" placeholder="Enter full name of next of kin" required style="background: rgba(13, 21, 45, 0.95);">
+          <span style="font-size: 0.72rem; color: var(--text-muted); margin-top: 4px; display: block;">
+            * Used for secure password recovery if you ever lose access to your account.
+          </span>
+        </div>
+
+        <!-- Password Field with Generator & Strength Meter -->
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label class="form-label" for="regPassword" style="margin-bottom: 0;">Password</label>
+            <button type="button" id="btnGenStrongPass" class="btn-outline btn-sm" style="padding: 3px 8px; font-size: 0.72rem;">
+              <i class="fa-solid fa-wand-magic-sparkles"></i> Generate Strong Password
+            </button>
+          </div>
+          <div style="position: relative;">
+            <input type="password" id="regPassword" placeholder="••••••••" required>
+            <button type="button" id="toggleRegPass" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); background: transparent; color: var(--text-muted);">
+              <i class="fa-regular fa-eye"></i>
+            </button>
+          </div>
+
+          <!-- Live Dynamic Password Requirements Indicator -->
+          <div class="password-meter-container" id="regPassMeter">
+            <div class="password-req-item" id="reqMin8">
+              <i class="fa-solid fa-circle-xmark"></i> Minimum 8 characters
+            </div>
+            <div class="password-req-item" id="reqUpper">
+              <i class="fa-solid fa-circle-xmark"></i> At least one uppercase letter (A-Z)
+            </div>
+            <div class="password-req-item" id="reqLower">
+              <i class="fa-solid fa-circle-xmark"></i> At least one lowercase letter (a-z)
+            </div>
+            <div class="password-req-item" id="reqNumber">
+              <i class="fa-solid fa-circle-xmark"></i> At least one number (0-9)
+            </div>
+            <div class="password-req-item" id="reqSpecial">
+              <i class="fa-solid fa-circle-xmark"></i> At least one special character (!@#$%^&*)
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="regConfirmPassword">Confirm Password</label>
+          <input type="password" id="regConfirmPassword" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" id="regSubmitBtn" class="btn btn-primary btn-block" style="margin-top: 10px;">
+          <i class="fa-solid fa-user-plus"></i> Register
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 20px; font-size: 0.86rem; color: var(--text-muted);">
+        Already registered? <a href="#" id="toLoginLink" style="font-weight: 700;">Sign In</a>
+      </div>
+    </div>
+
+    <!-- 3. FORGOT PASSWORD / RECOVERY CARD -->
+    <div id="recoveryCard" class="auth-card" style="display: none;">
+      <div class="auth-header">
+        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <h2>Password Recovery</h2>
+        <p class="auth-tagline">Verify your security information</p>
+      </div>
+
+      <!-- Step 1: Security Verification -->
+      <form id="recoveryVerifyForm">
+        <div class="form-group">
+          <label class="form-label" for="recEmail">Registered Email Address</label>
+          <input type="email" id="recEmail" placeholder="you@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="recNextOfKin">Security Question: What is the name of your next of kin?</label>
+          <input type="text" id="recNextOfKin" placeholder="Enter exact name provided at registration" required>
+        </div>
+
+        <button type="submit" id="recVerifyBtn" class="btn btn-primary btn-block">
+          <i class="fa-solid fa-check"></i> Verify Security Answer
+        </button>
+      </form>
+
+      <!-- Step 2: Set New Password (Appears after Step 1 Success) -->
+      <form id="recoveryResetForm" style="display: none; margin-top: 15px;">
+        <div class="va-instruction-alert" style="margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #34D399;">
+          <i class="fa-solid fa-circle-check"></i> Security verification passed. Enter your new password below:
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="recNewPassword">New Password</label>
+          <input type="password" id="recNewPassword" placeholder="••••••••" required>
+          
+          <div class="password-meter-container" id="recPassMeter" style="margin-top: 8px;">
+            <div class="password-req-item" id="recReqMin8"><i class="fa-solid fa-circle-xmark"></i> Minimum 8 characters</div>
+            <div class="password-req-item" id="recReqUpper"><i class="fa-solid fa-circle-xmark"></i> At least one uppercase letter</div>
+            <div class="password-req-item" id="recReqLower"><i class="fa-solid fa-circle-xmark"></i> At least one lowercase letter</div>
+            <div class="password-req-item" id="recReqNumber"><i class="fa-solid fa-circle-xmark"></i> At least one number</div>
+            <div class="password-req-item" id="recReqSpecial"><i class="fa-solid fa-circle-xmark"></i> At least one special character</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="recConfirmPassword">Confirm New Password</label>
+          <input type="password" id="recConfirmPassword" placeholder="••••••••" required>
+        </div>
+
+        <button type="submit" id="recResetBtn" class="btn btn-primary btn-block">
+          <i class="fa-solid fa-key"></i> Update Password & Sign In
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 20px; font-size: 0.86rem; color: var(--text-muted);">
+        Remember your password? <a href="#" id="toLoginFromRecLink" style="font-weight: 700;">Back to Sign In</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MAIN APPLICATION DASHBOARD ================= -->
+  <div id="appContainer" class="app-container" style="display: none;">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <img src="Image.png" alt="STRICTWALLET" class="brand-logo">
+        <span class="brand-title">STRICTWALLET</span>
+        <span class="brand-badge">WALLET</span>
+      </div>
+
+      <nav class="sidebar-menu">
+        <div class="nav-item active" data-view="viewDashboard">
+          <i class="fa-solid fa-wallet"></i>
+          <span>Dashboard</span>
+        </div>
+        <div class="nav-item" data-view="viewAirtime">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+          <span>Buy Airtime</span>
+        </div>
+        <div class="nav-item" data-view="viewData">
+          <i class="fa-solid fa-wifi"></i>
+          <span>Buy Data</span>
+        </div>
+        <div class="nav-item" data-view="viewTransactions">
+          <i class="fa-solid fa-list-check"></i>
+          <span>Wallet / Transactions</span>
+        </div>
+        <div class="nav-item" data-view="viewSupport">
+          <i class="fa-solid fa-headset"></i>
+          <span>Customer Care</span>
+        </div>
+        <div class="nav-item" data-view="viewSettings">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Settings</span>
+        </div>
+        <div class="nav-item btn-install-pwa" onclick="installPWA()" style="display: none; color: var(--accent-emerald); cursor: pointer;">
+          <i class="fa-solid fa-mobile-screen"></i>
+          <span>Install App</span>
+        </div>
+        <div class="nav-item" id="btnLogout" style="color: var(--status-error); margin-top: auto;">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Logout</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-mini-card">
+          <div class="user-avatar" id="sidebarUserAvatar">U</div>
+          <div class="user-info">
+            <div class="user-name" id="sidebarUserName">User Name</div>
+            <div class="user-email" id="sidebarUserEmail">user@example.com</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+      
+      <!-- Topbar Header -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="mobile-toggle-btn" id="mobileToggleBtn">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <h1 class="page-headline" id="pageHeadline">Dashboard</h1>
+        </div>
+
+        <div class="topbar-right">
+          <div class="balance-pill">
+            <span class="balance-pill-label">Balance:</span>
+            <span class="balance-pill-amount" id="topbarBalance">₦0.00</span>
+          </div>
+          <button class="btn btn-outline btn-sm btn-install-pwa" onclick="installPWA()" style="display: none; border-color: var(--accent-emerald); color: var(--accent-emerald); padding: 7px 12px;">
+            <i class="fa-solid fa-download"></i> Install App
+          </button>
+          <button class="btn btn-outline btn-sm" id="btnQuickFund" style="padding: 7px 12px;">
+            <i class="fa-solid fa-plus"></i> Fund Wallet
+          </button>
+        </div>
+      </header>
+
+      <!-- Content Views Body -->
+      <main class="content-body">
+        
+        <!-- ================= 1. DASHBOARD VIEW ================= -->
+        <section id="viewDashboard" class="view-section active-view">
+          
+          <div class="grid-cards-2">
+            
+            <!-- Hero Wallet Balance Card -->
+            <div class="wallet-hero-card">
+              <div class="wallet-balance-title">
+                <span>AVAILABLE WALLET BALANCE</span>
+                <button id="toggleBalanceVisibility" style="background: transparent; color: var(--text-muted); font-size: 0.95rem;">
+                  <i class="fa-regular fa-eye" id="eyeIcon"></i>
+                </button>
+              </div>
+
+              <div class="wallet-balance-amount" id="dashboardBalanceAmount">
+                ₦0.00
+              </div>
+
+              <div class="wallet-actions">
+                <button class="btn btn-primary" id="btnDashboardFund" onclick="openModal('fundWalletModal')">
+                  <i class="fa-solid fa-plus"></i> Fund Wallet
+                </button>
+                <button class="btn btn-secondary" onclick="navigateToView('viewAirtime')">
+                  <i class="fa-solid fa-mobile-screen-button"></i> Airtime
+                </button>
+                <button class="btn btn-secondary" onclick="navigateToView('viewData')">
+                  <i class="fa-solid fa-wifi"></i> Data
+                </button>
+              </div>
+            </div>
+
+            <!-- Virtual account logic removed, using direct Paystack funding modal -->
+
+          </div>
+
+          <!-- Platform Statistics Grid -->
+          <div class="grid-cards-4">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statTotalDeposits">₦0.00</div>
+                  <div class="card-subtitle">Total Verified Deposits</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-money-bill-transfer"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statAirtimeSpent">₦0.00</div>
+                  <div class="card-subtitle">Airtime Purchases</div>
+                </div>
+                <div class="card-icon-badge blue">
+                  <i class="fa-solid fa-phone-volume"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="statDataSpent">₦0.00</div>
+                  <div class="card-subtitle">Data Purchases</div>
+                </div>
+                <div class="card-icon-badge purple">
+                  <i class="fa-solid fa-tower-broadcast"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card" style="cursor: pointer;" onclick="navigateToView('viewSupport')">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">24/7 Support</div>
+                  <div class="card-subtitle">Customer Care Help Desk</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-headset"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Transactions -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Recent Activity</h3>
+                <p class="card-subtitle">Latest wallet deposits and purchases</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="navigateToView('viewTransactions')">
+                View All Transactions
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="recentTransactionsTableBody">
+                  <tr>
+                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--text-muted);">
+                      Loading your transactions...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Official Social Communities & Channels -->
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 class="card-title"><i class="fa-solid fa-share-nodes" style="color: var(--accent-emerald);"></i> Connect on Social Media</h3>
+                <p class="card-subtitle">Join our verified official channels and community groups for news and announcements</p>
+              </div>
+            </div>
+            <div class="social-links-grid" id="userSocialLinksContainer">
+              <!-- Injected dynamically by JS -->
+            </div>
+          </div>
+
+        </section>
+
+        <!-- ================= 2. BUY AIRTIME VIEW ================= -->
+        <section id="viewAirtime" class="view-section">
+          <div class="card" style="max-width: 650px; margin: 0 auto;">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Instant Airtime Recharge</h2>
+                <p class="card-subtitle">Top-up MTN, GLO, Airtel & 9Mobile instantly</p>
+              </div>
+              <div class="card-icon-badge emerald">
+                <i class="fa-solid fa-mobile-screen-button"></i>
+              </div>
+            </div>
+
+            <form id="airtimeForm">
+              <div class="form-group">
+                <label class="form-label">Select Network</label>
+                <div class="network-grid" id="airtimeNetworkSelector">
+                  <div class="network-badge selected" data-network="1">
+                    <span class="network-logo-pill network-mtn">MTN</span>
+                  </div>
+                  <div class="network-badge" data-network="2">
+                    <span class="network-logo-pill network-glo">GLO</span>
+                  </div>
+                  <div class="network-badge" data-network="4">
+                    <span class="network-logo-pill network-airtel">AIRTEL</span>
+                  </div>
+                  <div class="network-badge" data-network="3">
+                    <span class="network-logo-pill network-9mobile">9MOBILE</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="airtimePhone">Recipient Phone Number</label>
+                <input type="tel" id="airtimePhone" placeholder="e.g. 08012345678" maxlength="11" required>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="airtimeAmount">Amount (₦50 - ₦50,000)</label>
+                <input type="number" id="airtimeAmount" placeholder="Enter amount (e.g. 1000)" min="50" max="50000" required>
+                
+                <div class="amount-pills">
+                  <span class="amount-pill" data-amount="100">₦100</span>
+                  <span class="amount-pill" data-amount="200">₦200</span>
+                  <span class="amount-pill" data-amount="500">₦500</span>
+                  <span class="amount-pill" data-amount="1000">₦1,000</span>
+                  <span class="amount-pill" data-amount="2000">₦2,000</span>
+                  <span class="amount-pill" data-amount="5000">₦5,000</span>
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block" style="padding: 14px;">
+                <i class="fa-solid fa-bolt"></i> Proceed to Confirmation
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ================= 3. BUY DATA VIEW ================= -->
+        <section id="viewData" class="view-section">
+          <div class="card" style="max-width: 800px; margin: 0 auto;">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title">Buy Data Bundles</h2>
+                <p class="card-subtitle">Select your network and choice data plan</p>
+              </div>
+              <div class="card-icon-badge blue">
+                <i class="fa-solid fa-wifi"></i>
+              </div>
+            </div>
+
+            <form id="dataForm">
+              <div class="form-group">
+                <label class="form-label">Select Network</label>
+                <div class="network-grid" id="dataNetworkSelector">
+                  <div class="network-badge selected" data-network="MTN" data-network-id="1">
+                    <span class="network-logo-pill network-mtn">MTN</span>
+                  </div>
+                  <div class="network-badge" data-network="GLO" data-network-id="2">
+                    <span class="network-logo-pill network-glo">GLO</span>
+                  </div>
+                  <div class="network-badge" data-network="AIRTEL" data-network-id="4">
+                    <span class="network-logo-pill network-airtel">AIRTEL</span>
+                  </div>
+                  <div class="network-badge" data-network="9MOBILE" data-network-id="3">
+                    <span class="network-logo-pill network-9mobile">9MOBILE</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. PLAN CATEGORY SELECTION -->
+              <div class="form-group" style="margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                  <label class="form-label" style="margin-bottom: 0;">Select Plan Category</label>
+                  <span id="categoryStatusNote" style="font-size: 0.78rem; color: var(--accent-emerald);">Choose bundle category</span>
+                </div>
+                <div class="category-pills" id="dataCategorySelector">
+                  <!-- Category pills injected dynamically based on selected network -->
+                </div>
+              </div>
+
+              <!-- 3. RECIPIENT PHONE NUMBER -->
+              <div class="form-group" style="margin-top: 14px;">
+                <label class="form-label" for="dataPhone">Recipient Phone Number</label>
+                <input type="tel" id="dataPhone" placeholder="e.g. 08012345678" maxlength="11" required>
+              </div>
+
+              <!-- 4. AVAILABLE PLANS IN SELECTED CATEGORY -->
+              <div class="form-group" style="margin-top: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label class="form-label" style="margin-bottom: 0;">
+                    Available Plans (<span id="currentCategoryBadge" style="color: var(--accent-emerald);">SME</span>)
+                  </label>
+                  <span id="planCountBadge" class="badge" style="background: rgba(255, 255, 255, 0.08); font-size: 0.75rem; color: var(--text-muted);">0 plans available</span>
+                </div>
+                <div class="plan-cards-grid" id="dataPlansGrid">
+                  <!-- Data plan cards injected dynamically via JS -->
+                </div>
+              </div>
+
+              <!-- 5. SELECTED PLAN LIVE SUMMARY & SELLING PRICE DISPLAY -->
+              <div id="selectedPlanPreviewBox" class="selected-plan-box" style="display: none;">
+                <div class="selected-plan-details">
+                  <div class="selected-plan-meta">
+                    <span class="badge" id="selectedPlanMetaBadge" style="background: rgba(0, 208, 156, 0.15); color: var(--accent-emerald); font-weight: 700;">MTN • SME</span>
+                    <span class="selected-plan-validity" id="selectedPlanValidityText"><i class="fa-regular fa-clock"></i> 30 Days</span>
+                  </div>
+                  <div class="selected-plan-title" id="selectedPlanTitleText">1.0 GB SME</div>
+                </div>
+                <div class="selected-plan-pricing">
+                  <span class="selected-plan-price-label">Selling Price</span>
+                  <span class="selected-plan-price-value" id="selectedPlanPriceText">₦0.00</span>
+                </div>
+              </div>
+
+              <button type="submit" id="btnDataProceed" class="btn btn-primary btn-block" style="padding: 14px; margin-top: 24px;" disabled>
+                <i class="fa-solid fa-bolt"></i> Proceed to Confirmation
+              </button>
+            </form>
+          </div>
+        </section>
+
+        <!-- ================= 4. TRANSACTIONS VIEW ================= -->
+        <section id="viewTransactions" class="view-section">
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Transaction Ledger & History</h2>
+                <p class="card-subtitle">Complete records of deposits and VTU purchases</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="txSearchInput" placeholder="Search by ID, Phone, Ref..." style="width: 240px; padding: 8px 14px;">
+                <select id="txFilterType" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Types</option>
+                  <option value="deposit">Deposits</option>
+                  <option value="airtime">Airtime</option>
+                  <option value="data">Data</option>
+                </select>
+                <select id="txFilterStatus" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Statuses</option>
+                  <option value="Successful">Successful</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Failed">Failed</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Tx ID</th>
+                    <th>Type</th>
+                    <th>Recipient / Account</th>
+                    <th>Amount</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody id="allTransactionsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 5. CUSTOMER CARE / SUPPORT TICKETS ================= -->
+        <section id="viewSupport" class="view-section">
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title">Customer Care Help Desk</h2>
+                <p class="card-subtitle">Create support tickets or reach our direct WhatsApp help desk anytime</p>
+              </div>
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                <a href="https://wa.me/2349161041419?text=Hello%20STRICTWALLET%20Customer%20Care,%20I%20need%20assistance." target="_blank" rel="noopener noreferrer" class="btn" style="background: #25D366; color: #FFF; font-weight: 700; box-shadow: 0 4px 14px rgba(37, 211, 102, 0.35);">
+                  <i class="fa-brands fa-whatsapp" style="font-size: 1.15rem;"></i> WhatsApp Customer Service (09161041419)
+                </a>
+                <button class="btn btn-primary" id="btnOpenNewTicketModal">
+                  <i class="fa-solid fa-plus"></i> Open New Ticket
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title" style="margin-bottom: 16px;">My Support Tickets</h3>
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Ticket No.</th>
+                    <th>Subject</th>
+                    <th>Category</th>
+                    <th>Created</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="userTicketsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 6. SETTINGS VIEW ================= -->
+        <section id="viewSettings" class="view-section">
+          <div class="grid-cards-2">
+            
+            <!-- User Profile Details -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Profile Information</h3>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-user"></i></div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Full Name</label>
+                <input type="text" id="setFullName" readonly style="opacity: 0.8;">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Email Address</label>
+                <input type="email" id="setEmail" readonly style="opacity: 0.8;">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone Number</label>
+                <input type="text" id="setPhone" readonly style="opacity: 0.8;">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Next of Kin (Recovery Question)</label>
+                <input type="text" id="setNextOfKin" readonly style="opacity: 0.8;">
+              </div>
+            </div>
+
+            <!-- Security: PIN & Password -->
+            <div class="card">
+              <div class="card-header">
+                <h3 class="card-title">Security & PIN Management</h3>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-shield-halved"></i></div>
+              </div>
+
+              <!-- Transaction PIN Section -->
+              <form id="pinForm" style="margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--border-color);">
+                <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-emerald);">
+                  <i class="fa-solid fa-key"></i> 4-Digit Transaction PIN
+                </h4>
+                <p style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 14px;">
+                  Your PIN is required to authorize every Airtime & Data purchase.
+                </p>
+
+                <div class="form-group" id="currentPinGroup" style="display: none;">
+                  <label class="form-label" for="currentPin">Current PIN (or Account Password)</label>
+                  <input type="password" id="currentPin" maxlength="20" placeholder="••••">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="newPin">New 4-Digit PIN</label>
+                  <input type="password" id="newPin" maxlength="4" placeholder="e.g. 1234" required pattern="\d{4}">
+                </div>
+
+                <button type="submit" class="btn btn-secondary btn-block">
+                  Save / Update Transaction PIN
+                </button>
+              </form>
+
+              <!-- Change Password Section -->
+              <form id="changePasswordForm">
+                <h4 style="font-size: 0.95rem; margin-bottom: 12px; color: var(--accent-blue-light);">
+                  <i class="fa-solid fa-lock"></i> Change Account Password
+                </h4>
+
+                <div class="form-group">
+                  <label class="form-label" for="changeCurrPass">Current Password</label>
+                  <input type="password" id="changeCurrPass" required placeholder="••••••••">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="changeNewPass">New Password</label>
+                  <input type="password" id="changeNewPass" required placeholder="••••••••">
+                  
+                  <div class="password-meter-container" id="changePassMeter" style="margin-top: 8px;">
+                    <div class="password-req-item" id="cpReqMin8"><i class="fa-solid fa-circle-xmark"></i> Minimum 8 characters</div>
+                    <div class="password-req-item" id="cpReqUpper"><i class="fa-solid fa-circle-xmark"></i> At least one uppercase letter</div>
+                    <div class="password-req-item" id="cpReqLower"><i class="fa-solid fa-circle-xmark"></i> At least one lowercase letter</div>
+                    <div class="password-req-item" id="cpReqNumber"><i class="fa-solid fa-circle-xmark"></i> At least one number</div>
+                    <div class="password-req-item" id="cpReqSpecial"><i class="fa-solid fa-circle-xmark"></i> At least one special character</div>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="changeConfPass">Confirm New Password</label>
+                  <input type="password" id="changeConfPass" required placeholder="••••••••">
+                </div>
+
+                <button type="submit" class="btn btn-secondary btn-block">
+                  Update Password
+                </button>
+              </form>
+
+            </div>
+
+          </div>
+        </section>
+
+      </main>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <div>
+          © 2026 STRICTWALLET. All rights reserved.
+        </div>
+        <div class="footer-links">
+          <a href="#" onclick="alert('STRICTWALLET Terms & Conditions: Strictly for airtime, data and digital funding. No unauthorized balance manipulation.'); return false;">Terms & Conditions</a>
+          <a href="#" onclick="alert('STRICTWALLET Privacy Policy: User data and security questions are strictly protected with enterprise encryption.'); return false;">Privacy Policy</a>
+          <a href="#" onclick="navigateToView('viewSupport'); return false;">Contact Support</a>
+        </div>
+      </footer>
+
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+      <button class="mobile-nav-btn active" data-view="viewDashboard">
+        <i class="fa-solid fa-wallet"></i>
+        <span>Home</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="viewAirtime">
+        <i class="fa-solid fa-mobile-screen-button"></i>
+        <span>Airtime</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="viewData">
+        <i class="fa-solid fa-wifi"></i>
+        <span>Data</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="viewTransactions">
+        <i class="fa-solid fa-list-check"></i>
+        <span>History</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="viewSupport">
+        <i class="fa-solid fa-headset"></i>
+        <span>Care</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- ================= MODALS & POPUPS ================= -->
+
+  <!-- 1. PURCHASE CONFIRMATION MODAL -->
+  <div id="purchaseConfirmModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="card-title" id="confirmModalTitle">Confirm Purchase</h3>
+        <button class="modal-close-btn" onclick="closeModal('purchaseConfirmModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(0, 0, 0, 0.25); border-radius: var(--radius-md); padding: 18px; margin-bottom: 20px; border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: var(--text-muted);">Service:</span>
+            <strong id="confirmServiceType" style="color: #FFF;">Airtime Top-up</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: var(--text-muted);">Network:</span>
+            <strong id="confirmNetwork" style="color: #FFF;">MTN</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;" id="confirmPlanRow">
+            <span style="color: var(--text-muted);">Plan:</span>
+            <strong id="confirmPlanName" style="color: #FFF;">1.0GB SME (30 Days)</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: var(--text-muted);">Recipient Phone:</span>
+            <strong id="confirmPhone" style="color: #FFF; font-family: var(--font-mono);">08012345678</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: var(--text-muted);">Amount:</span>
+            <strong id="confirmAmount" style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.15rem;">₦1,000.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 10px;">
+            <span style="color: var(--text-muted);">Available Wallet Balance:</span>
+            <strong id="confirmWalletBalance" style="color: #FFF; font-family: var(--font-mono);">₦5,500.00</strong>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="confirmTxPin" style="color: var(--accent-emerald); font-weight: 700;">
+            <i class="fa-solid fa-lock"></i> Enter 4-Digit Transaction PIN
+          </label>
+          <input type="password" id="confirmTxPin" maxlength="4" placeholder="••••" style="font-size: 1.3rem; letter-spacing: 0.3em; text-align: center;" required pattern="\d{4}">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('purchaseConfirmModal')">Cancel</button>
+        <button class="btn btn-primary" id="btnExecutePurchase">
+          <i class="fa-solid fa-check"></i> Confirm & Authorize
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OLD FUND WALLET MODAL REMOVED -->
+
+  <!-- 3. CREATE TICKET MODAL -->
+  <div id="createTicketModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="card-title">Open Support Ticket</h3>
+        <button class="modal-close-btn" onclick="closeModal('createTicketModal')">&times;</button>
+      </div>
+      <form id="newTicketForm">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="ticketSubject">Subject</label>
+            <input type="text" id="ticketSubject" placeholder="Brief summary of the issue" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ticketCategory">Category</label>
+            <select id="ticketCategory" required>
+              <option value="Airtime problem">Airtime problem</option>
+              <option value="Data problem">Data problem</option>
+              <option value="Deposit problem">Deposit problem</option>
+              <option value="Account problem">Account problem</option>
+              <option value="Payment problem">Payment problem</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ticketTxId">Related Transaction ID (Optional)</label>
+            <input type="text" id="ticketTxId" placeholder="e.g. TXN-AIR-12345">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ticketMessage">Message Details</label>
+            <textarea id="ticketMessage" rows="4" placeholder="Describe the issue in detail..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('createTicketModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="fa-solid fa-paper-plane"></i> Submit Ticket
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. CHAT TICKET THREAD MODAL -->
+  <div id="ticketChatModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 600px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title" id="chatTicketNumber">Ticket #SW-2026-000000</h3>
+          <p class="card-subtitle" id="chatTicketSubject">Subject</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('ticketChatModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="chat-container" id="ticketChatContainer">
+          <!-- Chat messages injected by JS -->
+        </div>
+
+        <form id="ticketReplyForm" style="display: flex; gap: 8px; margin-top: 14px;">
+          <input type="text" id="ticketReplyInput" placeholder="Type your response to support..." required>
+          <button type="submit" class="btn btn-primary" style="padding: 0 20px;">
+            <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. TRANSACTION RECEIPT MODAL -->
+  <div id="txReceiptModal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="card-title">Transaction Receipt</h3>
+        <button class="modal-close-btn" onclick="closeModal('txReceiptModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="txReceiptBody">
+        <!-- Injected by JS -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('txReceiptModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. FUND WALLET MODAL (PAYSTACK) -->
+  <div id="fundWalletModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 class="card-title">Fund Wallet</h3>
+        <button class="modal-close-btn" onclick="closeModal('fundWalletModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="fundWalletForm">
+          <div class="form-group">
+            <label class="form-label" for="depositAmount">Enter Amount</label>
+            <input type="number" id="depositAmount" placeholder="₦ 10,000" min="100" required>
+          </div>
+          <button type="submit" id="btnProcessPayment" class="btn btn-primary btn-block">
+            Process Payment
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating WhatsApp Customer Service Button -->
+  <a href="https://wa.me/2349161041419?text=Hello%20STRICTWALLET%20Customer%20Care,%20I%20need%20assistance." target="_blank" rel="noopener noreferrer" class="floating-whatsapp-btn" id="floatingWhatsappBtn" title="Chat on WhatsApp (09161041419)">
+    <i class="fa-brands fa-whatsapp"></i>
+    <span>WhatsApp Support</span>
+  </a>
+
+  <!-- Paystack Inline JS -->
+  <script src="https://js.paystack.co/v1/inline.js"></script>
+
+  <!-- Main JavaScript App Logic -->
+  <script src="Script.js"></script>
+</body>
+</html>
