@@ -25,6 +25,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Public health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
+});
+
 // Mount API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
