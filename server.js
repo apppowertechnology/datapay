@@ -15,6 +15,15 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static frontend files directly from project root
 app.use(express.static(path.join(__dirname)));
+// Development cache control - disable caching for frontend assets
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js') || req.path.endsWith('.css') || req.path.endsWith('.html')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
 
 // Mount API Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -22,6 +31,16 @@ app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/webhook', require('./routes/webhook'));
 app.use('/api/support', require('./routes/support'));
 app.use('/api/admin', require('./routes/admin'));
+
+// Public Settings & Active Social Links for Users
+app.get('/api/settings/social-links', async (req, res) => {
+  try {
+    const links = await db.getActiveSocialLinks();
+    return res.json({ success: true, links });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to load social links' });
+  }
+});
 
 // Catch-all route to serve index.html for frontend routing
 app.get('/admin', (req, res) => {
@@ -49,12 +68,12 @@ async function startServer() {
   try {
     await db.init();
 
-    // Ensure Default Administrator exists
+    // Ensure Default Administrator exists and has matching credentials
     const adminEmail = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@strictwallet.com').toLowerCase();
+    const adminPass = process.env.DEFAULT_ADMIN_PASSWORD || 'StrictAdmin2026!#';
     const existingAdmin = await db.getUserByEmail(adminEmail);
 
     if (!existingAdmin) {
-      const adminPass = process.env.DEFAULT_ADMIN_PASSWORD || 'StrictAdmin2026!#';
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash(adminPass, salt);
 
@@ -75,6 +94,26 @@ async function startServer() {
       };
       await db.saveUser(defaultAdmin);
       console.log(`[Admin Seed] Default administrator initialized: ${adminEmail}`);
+    } else {
+      let needsUpdate = false;
+      if (existingAdmin.role !== 'admin') {
+        existingAdmin.role = 'admin';
+        needsUpdate = true;
+      }
+      if (existingAdmin.status !== 'active') {
+        existingAdmin.status = 'active';
+        needsUpdate = true;
+      }
+      const isPasswordValid = await bcrypt.compare(adminPass, existingAdmin.passwordHash);
+      if (!isPasswordValid) {
+        const salt = await bcrypt.genSalt(10);
+        existingAdmin.passwordHash = await bcrypt.hash(adminPass, salt);
+        needsUpdate = true;
+        console.log(`[Admin Seed] Synchronized administrator password with configured master password.`);
+      }
+      if (needsUpdate) {
+        await db.saveUser(existingAdmin);
+      }
     }
 
     app.listen(PORT, () => {
