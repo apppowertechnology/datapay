@@ -20,9 +20,7 @@ const State = {
 };
 
 // API Base URL
-const API_BASE = window.location.protocol.startsWith('http')
-  ? `${window.location.origin}/api`
-  : 'http://localhost:5000/api';
+const API_BASE = 'https://datapay.onrender.com/api';
 
 // Toast Notification Manager
 function showToast(message, type = 'info') {
@@ -150,6 +148,7 @@ function navigateToView(viewId) {
 
   // Close mobile sidebar if open
   document.getElementById('sidebar')?.classList.remove('mobile-open');
+  document.getElementById('sidebarBackdrop')?.classList.remove('active');
 
   // Update Topbar Title
   const titles = {
@@ -627,10 +626,21 @@ function setupEventListeners() {
     });
   });
 
-  // Mobile Drawer Toggle
-  document.getElementById('mobileToggleBtn')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.toggle('mobile-open');
-  });
+  // Mobile Drawer Toggle & Backdrop Handlers
+  const sidebar = document.getElementById('sidebar');
+  const sidebarBackdrop = document.getElementById('sidebarBackdrop');
+  const toggleSidebar = () => {
+    const isOpen = sidebar?.classList.toggle('mobile-open');
+    sidebarBackdrop?.classList.toggle('active', !!isOpen);
+  };
+  const closeSidebar = () => {
+    sidebar?.classList.remove('mobile-open');
+    sidebarBackdrop?.classList.remove('active');
+  };
+
+  document.getElementById('mobileToggleBtn')?.addEventListener('click', toggleSidebar);
+  document.getElementById('sidebarCloseBtn')?.addEventListener('click', closeSidebar);
+  sidebarBackdrop?.addEventListener('click', closeSidebar);
 
   // Hide / Show Balance Toggle
   document.getElementById('toggleBalanceVisibility')?.addEventListener('click', () => {

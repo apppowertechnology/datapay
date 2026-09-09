@@ -74,6 +74,9 @@
         <span class="brand-badge" style="background: rgba(37, 99, 235, 0.2); color: var(--accent-blue-light); border-color: rgba(37, 99, 235, 0.4);">
           ADMIN
         </span>
+        <button class="sidebar-close-btn" id="adminSidebarCloseBtn" aria-label="Close menu">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       <nav class="sidebar-menu">
@@ -122,6 +125,9 @@
       </div>
     </aside>
 
+    <!-- Mobile Admin Sidebar Backdrop Overlay -->
+    <div class="sidebar-backdrop" id="adminSidebarBackdrop"></div>
+
     <!-- Admin Main Wrapper -->
     <div class="main-wrapper">
       
@@ -136,7 +142,7 @@
 
         <div class="topbar-right">
           <span class="badge badge-success" style="padding: 6px 12px; font-size: 0.8rem;">
-            <i class="fa-solid fa-circle-check"></i> System Operational
+            <i class="fa-solid fa-circle-check"></i> <span class="admin-status-text">System Operational</span>
           </span>
           <button class="btn btn-outline btn-sm" id="btnRefreshAdminData">
             <i class="fa-solid fa-rotate"></i> Refresh

@@ -13,9 +13,8 @@ const AdminState = {
   activeAdminTicketId: null
 };
 
-const API_BASE = window.location.protocol.startsWith('http')
-  ? `${window.location.origin}/api`
-  : 'http://localhost:5000/api';
+// API Base URL
+const API_BASE = 'https://datapay.onrender.com/api';
 
 // Toast Notification Manager
 function showAdminToast(message, type = 'info') {
@@ -149,6 +148,7 @@ function navigateAdminView(viewId) {
   });
 
   document.getElementById('adminSidebar')?.classList.remove('mobile-open');
+  document.getElementById('adminSidebarBackdrop')?.classList.remove('active');
 
   const titles = {
     viewAdminOverview: 'Overview & Analytics',
@@ -220,10 +220,21 @@ function setupAdminEventListeners() {
     });
   });
 
-  // Mobile Drawer
-  document.getElementById('adminMobileToggle')?.addEventListener('click', () => {
-    document.getElementById('adminSidebar')?.classList.toggle('mobile-open');
-  });
+  // Mobile Drawer & Backdrop Handlers
+  const adminSidebar = document.getElementById('adminSidebar');
+  const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+  const toggleAdminSidebar = () => {
+    const isOpen = adminSidebar?.classList.toggle('mobile-open');
+    adminSidebarBackdrop?.classList.toggle('active', !!isOpen);
+  };
+  const closeAdminSidebar = () => {
+    adminSidebar?.classList.remove('mobile-open');
+    adminSidebarBackdrop?.classList.remove('active');
+  };
+
+  document.getElementById('adminMobileToggle')?.addEventListener('click', toggleAdminSidebar);
+  document.getElementById('adminSidebarCloseBtn')?.addEventListener('click', closeAdminSidebar);
+  adminSidebarBackdrop?.addEventListener('click', closeAdminSidebar);
 
   // Refresh
   document.getElementById('btnRefreshAdminData')?.addEventListener('click', () => {
