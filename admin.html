@@ -92,6 +92,10 @@
           <i class="fa-solid fa-receipt"></i>
           <span>Transaction Ledger</span>
         </div>
+        <div class="nav-item" data-admin-view="viewAdminEvents">
+          <i class="fa-solid fa-calendar-days"></i>
+          <span>Events & Creator Payouts</span>
+        </div>
         <div class="nav-item" data-admin-view="viewAdminPricing">
           <i class="fa-solid fa-tags"></i>
           <span>Pricing & Profit</span>
@@ -510,6 +514,167 @@
               </table>
             </div>
           </div>
+        </section>
+
+        <!-- ================= 8. EVENTS & CREATOR PAYOUTS MANAGEMENT ================= -->
+        <section id="viewAdminEvents" class="view-section">
+          
+          <!-- Key Performance Indicators (KPIs) -->
+          <div class="grid-cards-4" style="margin-bottom: 20px;">
+            
+            <!-- Gross Ticket Sales -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatGrossTicketSales">₦0.00</div>
+                  <div class="card-subtitle">Gross Ticket Sales (<span id="admStatTicketsSold">0</span> sold)</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-ticket"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- STRICTWALLET 3% Commission -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatTicketCommission">₦0.00</div>
+                  <div class="card-subtitle">STRICTWALLET 3% Commission</div>
+                </div>
+                <div class="card-icon-badge purple">
+                  <i class="fa-solid fa-percent"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event Creator Net Earnings -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatCreatorEarnings">₦0.00</div>
+                  <div class="card-subtitle">Event Creator Earnings (97%)</div>
+                </div>
+                <div class="card-icon-badge blue">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Total Events -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatTotalEvents">0</div>
+                  <div class="card-subtitle"><span id="admStatPublishedEvents">0</span> Published • <span id="admStatDraftEvents">0</span> Draft</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-calendar-days"></i>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Withdrawal Profit Analytics Card (Requirement 33) -->
+          <div class="card" style="margin-bottom: 24px; border: 1px solid rgba(0, 208, 156, 0.3); background: linear-gradient(135deg, rgba(13, 21, 45, 0.85) 0%, rgba(17, 27, 54, 0.85) 100%);">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title"><i class="fa-solid fa-scale-balanced" style="color: var(--accent-emerald);"></i> Event Creator Withdrawal Economics</h3>
+                <p class="card-subtitle">STRICTWALLET charges ₦20 per withdrawal. Strowallet fee is ₦10. Net platform profit is ₦10 per successful payout.</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="loadAdminEventsAnalytics()">
+                <i class="fa-solid fa-rotate"></i> Refresh
+              </button>
+            </div>
+
+            <div class="grid-cards-4" style="margin-top: 14px;">
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Successful Withdrawals</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: #FFF; font-family: var(--font-mono);" id="admStatSuccessfulWithdrawals">0</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Total Volume: <span id="admStatWithdrawalVolume" style="color: var(--accent-blue-light);">₦0.00</span></div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Charges Collected (₦20/tx)</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);" id="admStatChargesCollected">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">₦20 per withdrawal</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Provider Fees Paid (₦10/tx)</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--status-warning); font-family: var(--font-mono);" id="admStatProviderFees">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Strowallet cost</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--accent-emerald);">
+                <div style="font-size: 0.75rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">STRICTWALLET Net Profit</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);" id="admStatNetWithdrawalProfit">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 2px;">₦10 / completed transfer</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: Events List Table -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+              <h3 class="card-title">All Created Events</h3>
+              <input type="text" id="admEventsSearch" placeholder="Search events..." style="max-width: 250px; padding: 6px 12px; font-size: 0.82rem;" oninput="filterAdminEventsTable()">
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Event ID / Slug</th>
+                    <th>Event Name</th>
+                    <th>Event Creator</th>
+                    <th>Date & Time</th>
+                    <th>Venue</th>
+                    <th>Ticket Categories</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="admEventsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Creator Withdrawals Ledger & Profit Table -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Event Creator Withdrawals Ledger</h3>
+                <p class="card-subtitle">Detailed audit records of organizer bank transfer requests, fee accounting, and confirmed profit.</p>
+              </div>
+              <input type="text" id="admWithdrawalsSearch" placeholder="Search withdrawals..." style="max-width: 250px; padding: 6px 12px; font-size: 0.82rem;" oninput="filterAdminWithdrawalsTable()">
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Creator Name</th>
+                    <th>Amount</th>
+                    <th>Charge (₦20)</th>
+                    <th>Cost (₦10)</th>
+                    <th>STRICTWALLET Profit</th>
+                    <th>Destination Bank</th>
+                    <th>Account No.</th>
+                    <th>Narration</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="admWithdrawalsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
         </section>
 
       </main>

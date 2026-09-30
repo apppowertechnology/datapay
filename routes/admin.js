@@ -702,5 +702,169 @@ router.delete('/social-links/:id', async (req, res) => {
   }
 });
 
+// ==========================================
+// 10. ADMIN EVENT TICKETING & WITHDRAWAL ANALYTICS
+// ==========================================
+router.get('/events/analytics', async (req, res) => {
+  try {
+    const events = await db.getAllEvents();
+    const tickets = await db.getAllTickets();
+    const withdrawals = await db.getAllEventWithdrawals();
+
+    const totalEvents = events.length;
+    const publishedEvents = events.filter(e => e.status === 'published').length;
+    const draftEvents = events.filter(e => e.status !== 'published').length;
+
+    let totalTicketsSold = 0;
+    let grossTicketSales = 0;
+    let totalTicketCommission = 0;
+    let totalCreatorEarnings = 0;
+
+    tickets.forEach(t => {
+      const price = parseFloat(t.ticketPrice || 0);
+      const comm = parseFloat(t.commissionFee || Math.round(price * 0.03 * 100) / 100);
+      const earn = parseFloat(t.creatorEarnings || Math.round((price - comm) * 100) / 100);
+
+      totalTicketsSold++;
+      grossTicketSales += price;
+      totalTicketCommission += comm;
+      totalCreatorEarnings += earn;
+    });
+
+    grossTicketSales = Math.round(grossTicketSales * 100) / 100;
+    totalTicketCommission = Math.round(totalTicketCommission * 100) / 100;
+    totalCreatorEarnings = Math.round(totalCreatorEarnings * 100) / 100;
+
+    // Withdrawals accounting:
+    // Every successful withdrawal:
+    // Organizer charge = ₦20
+    // Provider fee = ₦10
+    // STRICTWALLET profit = ₦10
+    let totalWithdrawalCount = withdrawals.length;
+    let successfulWithdrawals = 0;
+    let failedWithdrawals = 0;
+    let pendingWithdrawals = 0;
+
+    let totalWithdrawalCharges = 0;
+    let totalProviderFees = 0;
+    let totalWithdrawalProfit = 0;
+    let totalWithdrawalVolume = 0;
+
+    withdrawals.forEach(w => {
+      const amt = parseFloat(w.amount || 0);
+      if (w.status === 'Successful') {
+        successfulWithdrawals++;
+        totalWithdrawalVolume += amt;
+        const charge = parseFloat(w.charge || 20.00);
+        const providerFee = parseFloat(w.providerFee || 10.00);
+        const profit = parseFloat(w.profit || (charge - providerFee));
+
+        totalWithdrawalCharges += charge;
+        totalProviderFees += providerFee;
+        totalWithdrawalProfit += profit;
+      } else if (w.status === 'Failed') {
+        failedWithdrawals++;
+      } else {
+        pendingWithdrawals++;
+      }
+    });
+
+    totalWithdrawalCharges = Math.round(totalWithdrawalCharges * 100) / 100;
+    totalProviderFees = Math.round(totalProviderFees * 100) / 100;
+    totalWithdrawalProfit = Math.round(totalWithdrawalProfit * 100) / 100;
+    totalWithdrawalVolume = Math.round(totalWithdrawalVolume * 100) / 100;
+
+    return res.json({
+      success: true,
+      metrics: {
+        events: {
+          total: totalEvents,
+          published: publishedEvents,
+          draft: draftEvents
+        },
+        ticketSales: {
+          totalTicketsSold,
+          grossTicketSales,
+          strictwalletCommission: totalTicketCommission,
+          creatorEarnings: totalCreatorEarnings
+        },
+        withdrawals: {
+          total: totalWithdrawalCount,
+          successful: successfulWithdrawals,
+          failed: failedWithdrawals,
+          pending: pendingWithdrawals,
+          totalVolume: totalWithdrawalVolume,
+          totalChargesCollected: totalWithdrawalCharges,
+          totalProviderFees: totalProviderFees,
+          totalStrictwalletProfit: totalWithdrawalProfit
+        }
+      },
+      events,
+      tickets: tickets.slice(0, 100),
+      withdrawals: withdrawals.slice(0, 100)
+    });
+  } catch (error) {
+    console.error('[Admin Event Analytics Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve event analytics.' });
+  }
+});
+
+// ==========================================
+// 11. ADMIN DELETE EVENT
+// ==========================================
+router.delete('/events/:id', async (req, res) => {
+  try {
+    const event = await db.getEventById(req.params.id);
+    if (!event || event.isDeleted) {
+      return res.status(404).json({ success: false, message: 'Event not found.' });
+    }
+
+    const tickets = await db.getTicketsByEvent(event.id);
+    const hasSoldTickets = (tickets && tickets.length > 0) || (event.ticketTypes || []).some(tt => (parseInt(tt.quantitySold, 10) || 0) > 0);
+
+    if (hasSoldTickets) {
+      // Safe deletion/archiving: preserve buyer tickets, attendee history, and financial records
+      await db.updateEvent(event.id, {
+        isDeleted: true,
+        status: 'cancelled',
+        deletedAt: new Date().toISOString(),
+        deletedBy: req.user.id
+      });
+
+      await db.addAuditLog({
+        id: `LOG-${Date.now()}`,
+        adminId: req.user.id,
+        adminEmail: req.user.email,
+        action: 'ADMIN_EVENT_DELETED',
+        description: `Admin safely archived and deleted event "${event.title}" (${event.id}) preserving sold tickets.`
+      });
+
+      return res.json({
+        success: true,
+        message: 'Event deleted successfully (archived to preserve attendee ticket records).'
+      });
+    } else {
+      // 0 tickets sold: clean removal
+      await db.deleteEvent(event.id);
+
+      await db.addAuditLog({
+        id: `LOG-${Date.now()}`,
+        adminId: req.user.id,
+        adminEmail: req.user.email,
+        action: 'ADMIN_EVENT_DELETED',
+        description: `Admin permanently deleted event "${event.title}" (${event.id}).`
+      });
+
+      return res.json({
+        success: true,
+        message: 'Event deleted successfully.'
+      });
+    }
+  } catch (error) {
+    console.error('[Admin Delete Event Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to delete event.' });
+  }
+});
 
 module.exports = router;
+

@@ -13,8 +13,11 @@ const AdminState = {
   activeAdminTicketId: null
 };
 
-// API Base URL
-const API_BASE = 'https://datapay.onrender.com/api';
+// API Base URL (Relative /api for local development & same-origin production)
+const API_BASE = (window.location.protocol.startsWith('http') && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || !window.location.origin.includes('datapay.onrender.com')))
+  ? '/api'
+  : 'https://datapay.onrender.com/api';
+
 
 // Toast Notification Manager
 function showAdminToast(message, type = 'info') {
@@ -154,6 +157,7 @@ function navigateAdminView(viewId) {
     viewAdminOverview: 'Overview & Analytics',
     viewAdminUsers: 'User Management',
     viewAdminTransactions: 'Master Transaction Ledger',
+    viewAdminEvents: 'Events & Creator Payouts Management',
     viewAdminPricing: 'Pricing & Profit Matrix',
     viewAdminSupport: 'Support Desk & Tickets',
     viewAdminLogs: 'Administrative Audit Trail',
@@ -164,6 +168,7 @@ function navigateAdminView(viewId) {
   if (viewId === 'viewAdminOverview') loadAdminOverview();
   if (viewId === 'viewAdminUsers') loadAdminUsers();
   if (viewId === 'viewAdminTransactions') loadAdminTransactions();
+  if (viewId === 'viewAdminEvents') loadAdminEventsAnalytics();
   if (viewId === 'viewAdminPricing') loadAdminPricing();
   if (viewId === 'viewAdminSupport') loadAdminSupportTickets();
   if (viewId === 'viewAdminLogs') loadAdminAuditLogs();
@@ -1056,3 +1061,178 @@ function logoutAdmin(showNotification = true) {
   showAdminAuthScreen();
   if (showNotification) showAdminToast('Admin signed out safely.', 'info');
 }
+
+// ==========================================================================
+// ADMIN EVENT TICKETING & WITHDRAWAL ANALYTICS
+// ==========================================================================
+
+async function loadAdminEventsAnalytics() {
+  const tbodyEvents = document.getElementById('admEventsTableBody');
+  const tbodyWth = document.getElementById('admWithdrawalsTableBody');
+
+  if (tbodyEvents) {
+    tbodyEvents.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading event analytics...</td></tr>`;
+  }
+  if (tbodyWth) {
+    tbodyWth.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading withdrawal ledger...</td></tr>`;
+  }
+
+  try {
+    const { ok, data } = await adminFetch('/admin/events/analytics');
+    if (!ok || !data.success) {
+      showAdminToast(data.message || 'Failed to retrieve event analytics', 'error');
+      return;
+    }
+
+    AdminState.adminEventsData = data;
+    const m = data.metrics;
+
+    // 1. Update KPI Card Values
+    document.getElementById('admStatGrossTicketSales').innerText = formatNaira(m.ticketSales.grossTicketSales);
+    document.getElementById('admStatTicketsSold').innerText = m.ticketSales.totalTicketsSold;
+    document.getElementById('admStatTicketCommission').innerText = formatNaira(m.ticketSales.strictwalletCommission);
+    document.getElementById('admStatCreatorEarnings').innerText = formatNaira(m.ticketSales.creatorEarnings);
+
+    document.getElementById('admStatTotalEvents').innerText = m.events.total;
+    document.getElementById('admStatPublishedEvents').innerText = m.events.published;
+    document.getElementById('admStatDraftEvents').innerText = m.events.draft;
+
+    // 2. Update Withdrawal Economics & Platform Profit
+    document.getElementById('admStatSuccessfulWithdrawals').innerText = m.withdrawals.successful;
+    document.getElementById('admStatWithdrawalVolume').innerText = formatNaira(m.withdrawals.totalVolume);
+    document.getElementById('admStatChargesCollected').innerText = formatNaira(m.withdrawals.totalChargesCollected);
+    document.getElementById('admStatProviderFees').innerText = formatNaira(m.withdrawals.totalProviderFees);
+    document.getElementById('admStatNetWithdrawalProfit').innerText = formatNaira(m.withdrawals.totalStrictwalletProfit);
+
+    // 3. Render Tables
+    renderAdminEventsTable(data.events || []);
+    renderAdminWithdrawalsTable(data.withdrawals || []);
+
+  } catch (err) {
+    console.error('Admin Event Analytics Load Error:', err);
+    showAdminToast('Error connecting to event analytics service', 'error');
+  }
+}
+
+function renderAdminEventsTable(events) {
+  const tbody = document.getElementById('admEventsTableBody');
+  if (!tbody) return;
+
+  if (events.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No events created yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = events.map(ev => {
+    const isPub = ev.status === 'published';
+    const cats = (ev.ticketTypes || []).map(t => `${t.name} (${formatNaira(t.price)})`).join(', ');
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight: 700; color: #FFF;">${ev.id}</div>
+          <div style="font-size: 0.76rem; color: var(--accent-blue-light); font-family: var(--font-mono);">${ev.slug}</div>
+        </td>
+        <td><strong>${ev.title}</strong></td>
+        <td>
+          <div>${ev.creatorName || '-'}</div>
+          <div style="font-size: 0.76rem; color: var(--text-muted);">${ev.creatorEmail || ''}</div>
+        </td>
+        <td>${ev.date} ${ev.time || ''}</td>
+        <td><span style="font-size: 0.85rem; color: var(--text-secondary);">${ev.venue}</span></td>
+        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem;">
+          ${cats || 'None'}
+        </td>
+        <td>
+          <span class="badge badge-${isPub ? 'success' : 'warning'}">${isPub ? 'PUBLISHED' : 'DRAFT'}</span>
+        </td>
+        <td>
+          <button class="btn btn-outline btn-sm" style="color: var(--status-error); border-color: rgba(239, 68, 68, 0.4); padding: 4px 10px; font-size: 0.78rem;" onclick="adminDeleteEvent('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+            <i class="fa-solid fa-trash-can"></i> Delete
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function adminDeleteEvent(eventId, eventTitle) {
+  if (!confirm(`Are you sure you want to delete event "${eventTitle}" (${eventId}) as administrator?\n\nThis will remove the event from public display and disable ticket sales.`)) {
+    return;
+  }
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/events/${eventId}`, {
+      method: 'DELETE'
+    });
+
+    if (ok && data.success) {
+      showAdminToast(data.message || 'Event deleted successfully.', 'success');
+      loadAdminEventsAnalytics();
+    } else {
+      showAdminToast(data.message || 'Failed to delete event.', 'error');
+    }
+  } catch (err) {
+    console.error('Admin delete event error:', err);
+    showAdminToast('Server error while deleting event.', 'error');
+  }
+}
+
+function filterAdminEventsTable() {
+  if (!AdminState.adminEventsData) return;
+  const q = document.getElementById('admEventsSearch').value.toLowerCase().trim();
+  const filtered = (AdminState.adminEventsData.events || []).filter(e =>
+    (e.title && e.title.toLowerCase().includes(q)) ||
+    (e.creatorName && e.creatorName.toLowerCase().includes(q)) ||
+    (e.id && e.id.toLowerCase().includes(q)) ||
+    (e.slug && e.slug.toLowerCase().includes(q))
+  );
+  renderAdminEventsTable(filtered);
+}
+
+function renderAdminWithdrawalsTable(withdrawals) {
+  const tbody = document.getElementById('admWithdrawalsTableBody');
+  if (!tbody) return;
+
+  if (withdrawals.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;">No withdrawal requests recorded yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = withdrawals.map(w => {
+    let statusBadge = 'badge-info';
+    if (w.status === 'Successful') statusBadge = 'badge-success';
+    if (w.status === 'Failed') statusBadge = 'badge-error';
+
+    const profitDisplay = w.status === 'Successful' ? '₦10.00' : '₦0.00';
+
+    return `
+      <tr>
+        <td style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-blue-light);">${w.id}</td>
+        <td><strong>${w.userFullName || '-'}</strong></td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: #FFF;">${formatNaira(w.amount)}</td>
+        <td style="color: var(--accent-emerald);">₦20.00</td>
+        <td style="color: var(--status-warning);">₦10.00</td>
+        <td style="color: var(--accent-emerald); font-weight: 700;">${profitDisplay}</td>
+        <td>${w.bankName || w.bankCode}</td>
+        <td style="font-family: var(--font-mono);">${w.accountNumber}</td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${w.narration || '-'}</td>
+        <td><span class="badge ${statusBadge}">${w.status.toUpperCase()}</span></td>
+        <td style="font-size: 0.78rem; color: var(--text-muted);">${formatDateTime(w.createdAt)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterAdminWithdrawalsTable() {
+  if (!AdminState.adminEventsData) return;
+  const q = document.getElementById('admWithdrawalsSearch').value.toLowerCase().trim();
+  const filtered = (AdminState.adminEventsData.withdrawals || []).filter(w =>
+    (w.userFullName && w.userFullName.toLowerCase().includes(q)) ||
+    (w.id && w.id.toLowerCase().includes(q)) ||
+    (w.accountNumber && w.accountNumber.includes(q)) ||
+    (w.bankName && w.bankName.toLowerCase().includes(q))
+  );
+  renderAdminWithdrawalsTable(filtered);
+}
+

@@ -36,6 +36,10 @@ let localCache = {
   supportTickets: {},
   supportMessages: {},
   adminAuditLogs: {},
+  events: {},
+  tickets: {},
+  organizerWallets: {},
+  eventWithdrawals: {},
   settings: {
     airtimeDiscountPercentage: 0, // e.g. 0% (cost 980, selling 1000)
     profitMarginPercentage: 2
@@ -441,6 +445,251 @@ const db = {
       return deleted;
     }
     return null;
+  },
+
+  // ==========================================
+  // EVENTS MANAGEMENT
+  // ==========================================
+  async createEvent(event) {
+    if (!localCache.events) localCache.events = {};
+    event.createdAt = event.createdAt || new Date().toISOString();
+    event.updatedAt = new Date().toISOString();
+    localCache.events[event.id] = event;
+    saveLocalBackup();
+    await syncToFirebase('events', event.id, event);
+    return event;
+  },
+
+  async getEventById(id) {
+    return (localCache.events && localCache.events[id]) || null;
+  },
+
+  async getEventBySlug(slug) {
+    if (!slug || !localCache.events) return null;
+    const cleanSlug = slug.toLowerCase().trim();
+    for (const key of Object.keys(localCache.events)) {
+      const ev = localCache.events[key];
+      if (ev && ev.slug && ev.slug.toLowerCase().trim() === cleanSlug) {
+        return ev;
+      }
+    }
+    return null;
+  },
+
+  reloadLocalBackup() {
+    if (fs.existsSync(LOCAL_DB_FILE)) {
+      try {
+        const fileContent = fs.readFileSync(LOCAL_DB_FILE, 'utf8');
+        const data = fileContent.trim() ? JSON.parse(fileContent) : {};
+        localCache = {
+          users: {},
+          transactions: {},
+          deposits: {},
+          dataPlans: {},
+          deletedPlans: {},
+          socialLinks: {},
+          supportTickets: {},
+          supportMessages: {},
+          adminAuditLogs: {},
+          events: {},
+          tickets: {},
+          organizerWallets: {},
+          eventWithdrawals: {},
+          settings: {
+            airtimeDiscountPercentage: 0,
+            profitMarginPercentage: 2
+          },
+          ...data
+        };
+        return true;
+      } catch (err) {
+        console.error('Error reloading local DB backup:', err.message);
+      }
+    }
+    return false;
+  },
+
+  async getAllEvents(options = {}) {
+    return Object.values(localCache.events || {})
+      .filter(ev => options.includeDeleted ? true : !ev.isDeleted)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getEventsByCreator(creatorId, options = {}) {
+    return Object.values(localCache.events || {})
+      .filter(ev => ev.creatorId === creatorId && (options.includeDeleted ? true : !ev.isDeleted))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async updateEvent(id, updateData) {
+    if (localCache.events && localCache.events[id]) {
+      localCache.events[id] = {
+        ...localCache.events[id],
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalBackup();
+      await syncToFirebase('events', id, localCache.events[id]);
+      return localCache.events[id];
+    }
+    return null;
+  },
+
+  async deleteEvent(id) {
+    if (localCache.events && localCache.events[id]) {
+      const deleted = localCache.events[id];
+      delete localCache.events[id];
+      saveLocalBackup();
+      await syncToFirebase('events', id, null);
+      return deleted;
+    }
+    return null;
+  },
+
+  // ==========================================
+  // TICKETS MANAGEMENT
+  // ==========================================
+  async createTicket(ticket) {
+    if (!localCache.tickets) localCache.tickets = {};
+    ticket.createdAt = ticket.createdAt || new Date().toISOString();
+    ticket.updatedAt = ticket.updatedAt || new Date().toISOString();
+    localCache.tickets[ticket.id] = ticket;
+    saveLocalBackup();
+    await syncToFirebase('tickets', ticket.id, ticket);
+    return ticket;
+  },
+
+  async getTicketById(id) {
+    return (localCache.tickets && localCache.tickets[id]) || null;
+  },
+
+  async getTicketByQrToken(qrToken) {
+    if (!qrToken || !localCache.tickets) return null;
+    for (const key of Object.keys(localCache.tickets)) {
+      const t = localCache.tickets[key];
+      if (t && t.qrToken === qrToken) {
+        return t;
+      }
+    }
+    return null;
+  },
+
+  async getTicketsByEvent(eventId) {
+    return Object.values(localCache.tickets || {})
+      .filter(t => t.eventId === eventId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getUserTickets(userId) {
+    return Object.values(localCache.tickets || {})
+      .filter(t => t.buyerId === userId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getAllTickets() {
+    return Object.values(localCache.tickets || {})
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async updateTicket(id, updateData) {
+    if (localCache.tickets && localCache.tickets[id]) {
+      localCache.tickets[id] = {
+        ...localCache.tickets[id],
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalBackup();
+      await syncToFirebase('tickets', id, localCache.tickets[id]);
+      return localCache.tickets[id];
+    }
+    return null;
+  },
+
+  // ==========================================
+  // EVENT CREATOR / ORGANIZER WALLET
+  // ==========================================
+  async getOrganizerWallet(userId) {
+    if (!localCache.organizerWallets) localCache.organizerWallets = {};
+    if (!localCache.organizerWallets[userId]) {
+      localCache.organizerWallets[userId] = {
+        userId,
+        balance: 0.00,
+        totalEarned: 0.00,
+        totalWithdrawn: 0.00,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalBackup();
+      await syncToFirebase('organizerWallets', userId, localCache.organizerWallets[userId]);
+    }
+    return localCache.organizerWallets[userId];
+  },
+
+  async saveOrganizerWallet(wallet) {
+    if (!localCache.organizerWallets) localCache.organizerWallets = {};
+    wallet.updatedAt = new Date().toISOString();
+    localCache.organizerWallets[wallet.userId] = wallet;
+    saveLocalBackup();
+    await syncToFirebase('organizerWallets', wallet.userId, wallet);
+    return wallet;
+  },
+
+  async creditOrganizerWallet(userId, amount) {
+    const wallet = await this.getOrganizerWallet(userId);
+    const amt = parseFloat(amount || 0);
+    wallet.balance = Math.round(((parseFloat(wallet.balance) || 0) + amt) * 100) / 100;
+    wallet.totalEarned = Math.round(((parseFloat(wallet.totalEarned) || 0) + amt) * 100) / 100;
+    return await this.saveOrganizerWallet(wallet);
+  },
+
+  async debitOrganizerWallet(userId, amount) {
+    const wallet = await this.getOrganizerWallet(userId);
+    const amt = parseFloat(amount || 0);
+    wallet.balance = Math.round(((parseFloat(wallet.balance) || 0) - amt) * 100) / 100;
+    wallet.totalWithdrawn = Math.round(((parseFloat(wallet.totalWithdrawn) || 0) + amt) * 100) / 100;
+    return await this.saveOrganizerWallet(wallet);
+  },
+
+  // ==========================================
+  // EVENT CREATOR WITHDRAWALS
+  // ==========================================
+  async createEventWithdrawal(wth) {
+    if (!localCache.eventWithdrawals) localCache.eventWithdrawals = {};
+    wth.createdAt = wth.createdAt || new Date().toISOString();
+    wth.updatedAt = new Date().toISOString();
+    localCache.eventWithdrawals[wth.id] = wth;
+    saveLocalBackup();
+    await syncToFirebase('eventWithdrawals', wth.id, wth);
+    return wth;
+  },
+
+  async getEventWithdrawalById(id) {
+    return (localCache.eventWithdrawals && localCache.eventWithdrawals[id]) || null;
+  },
+
+  async updateEventWithdrawal(id, updateData) {
+    if (localCache.eventWithdrawals && localCache.eventWithdrawals[id]) {
+      localCache.eventWithdrawals[id] = {
+        ...localCache.eventWithdrawals[id],
+        ...updateData,
+        updatedAt: new Date().toISOString()
+      };
+      saveLocalBackup();
+      await syncToFirebase('eventWithdrawals', id, localCache.eventWithdrawals[id]);
+      return localCache.eventWithdrawals[id];
+    }
+    return null;
+  },
+
+  async getAllEventWithdrawals() {
+    return Object.values(localCache.eventWithdrawals || {})
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getUserEventWithdrawals(userId) {
+    return Object.values(localCache.eventWithdrawals || {})
+      .filter(w => w.userId === userId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 };
 

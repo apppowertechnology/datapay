@@ -30,9 +30,29 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+// Temporary endpoint to check outbound server IP
+app.get('/my-ip', async (req, res) => {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json');
+    if (!response.ok) {
+      throw new Error(`IP service returned ${response.status}`);
+    }
+    const data = await response.json();
+    res.json({
+      ip: data.ip
+    });
+  } catch (error) {
+    console.error('Server IP check failed:', error);
+    res.status(500).json({
+      error: 'Unable to determine server IP'
+    });
+  }
+});
+
 // Mount API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/events', require('./routes/events'));
 app.use('/api/webhook', require('./routes/webhook'));
 app.use('/api/support', require('./routes/support'));
 app.use('/api/admin', require('./routes/admin'));
