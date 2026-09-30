@@ -106,15 +106,16 @@ router.post('/register', async (req, res) => {
 // 2. USER LOGIN
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const identifier = (req.body.identifier || req.body.email || req.body.phone || '').trim();
+    const { password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ success: false, message: 'Email and password are required.' });
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, message: 'Email or phone number and password are required.' });
     }
 
-    const user = await db.getUserByEmail(email);
+    const user = await db.getUserByIdentifier(identifier);
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid email address or password.' });
+      return res.status(401).json({ success: false, message: 'Invalid email address, phone number, or password.' });
     }
 
     if (user.status === 'suspended') {
@@ -123,7 +124,7 @@ router.post('/login', async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      return res.status(401).json({ success: false, message: 'Invalid email address or password.' });
+      return res.status(401).json({ success: false, message: 'Invalid email address, phone number, or password.' });
     }
 
     const token = jwt.sign(
@@ -150,15 +151,16 @@ router.post('/login', async (req, res) => {
 // 3. PASSWORD RECOVERY - VERIFY EMAIL & NEXT OF KIN
 router.post('/recover-verify', async (req, res) => {
   try {
-    const { email, nextOfKinAnswer } = req.body;
+    const identifier = (req.body.identifier || req.body.email || req.body.phone || '').trim();
+    const { nextOfKinAnswer } = req.body;
 
-    if (!email || !nextOfKinAnswer) {
-      return res.status(400).json({ success: false, message: 'Email and Next of Kin answer are required.' });
+    if (!identifier || !nextOfKinAnswer) {
+      return res.status(400).json({ success: false, message: 'Email or phone number and Next of Kin answer are required.' });
     }
 
-    const user = await db.getUserByEmail(email);
+    const user = await db.getUserByIdentifier(identifier);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'No account found with this email address.' });
+      return res.status(404).json({ success: false, message: 'No account found with this email or phone number.' });
     }
 
     const storedAnswer = (user.nextOfKinAnswer || user.nextOfKin || '').trim().toLowerCase();

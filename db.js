@@ -65,6 +65,18 @@ function saveLocalBackup() {
   }
 }
 
+function normalizePhoneNumber(phone) {
+  if (!phone) return '';
+  let cleaned = String(phone).replace(/[^\d+]/g, '');
+  if (cleaned.startsWith('+234')) {
+    cleaned = '0' + cleaned.slice(4);
+  } else if (cleaned.startsWith('234') && cleaned.length === 13) {
+    cleaned = '0' + cleaned.slice(3);
+  }
+  return cleaned;
+}
+
+
 // Helper to push/update to Firebase RTDB via REST API with fallback
 async function syncToFirebase(node, key, data) {
   if (!dbRef) return;
@@ -109,6 +121,13 @@ const defaultDataPlans = require('./dataPlans.json');
 const db = {
   async init() {
     console.log('Firebase Admin SDK initialized');
+    if (dbRef) {
+      try {
+        await loadFromFirebase('users');
+      } catch (e) {
+        console.warn('[DB Init] Could not pre-fetch users from Firebase:', e.message);
+      }
+    }
     localCache.deletedPlans = localCache.deletedPlans || {};
     // Initialize collections if empty, respecting deleted plans
     if (!localCache.dataPlans || Object.keys(localCache.dataPlans).length === 0) {
@@ -183,18 +202,102 @@ const db = {
 
   // USERS
   async getUserById(id) {
-    return localCache.users[id] || null;
+    if (!id) return null;
+    if (localCache.users[id]) return localCache.users[id];
+    if (dbRef) {
+      try {
+        const snap = await Promise.race([
+          dbRef.child(`users/${id}`).once('value'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase connection timeout')), 2000))
+        ]);
+        const user = snap.val();
+        if (user) {
+          localCache.users[user.id] = user;
+          saveLocalBackup();
+          return user;
+        }
+      } catch (err) {}
+    }
+    return null;
+  },
+
+  async getUserByIdentifier(identifier) {
+    if (!identifier) return null;
+    const cleanIdent = identifier.trim().toLowerCase();
+    const cleanPhone = normalizePhoneNumber(identifier);
+    const isEmail = cleanIdent.includes('@');
+
+    // 1. Search localCache
+    if (isEmail) {
+      for (const key of Object.keys(localCache.users)) {
+        const u = localCache.users[key];
+        if (u && u.email && u.email.trim().toLowerCase() === cleanIdent) {
+          return u;
+        }
+      }
+    } else {
+      if (cleanPhone) {
+        for (const key of Object.keys(localCache.users)) {
+          const u = localCache.users[key];
+          if (u && u.phone && normalizePhoneNumber(u.phone) === cleanPhone) {
+            return u;
+          }
+        }
+      }
+      for (const key of Object.keys(localCache.users)) {
+        const u = localCache.users[key];
+        if (u && u.email && u.email.trim().toLowerCase() === cleanIdent) {
+          return u;
+        }
+      }
+    }
+
+    // 2. Fallback to Firebase RTDB if user registered across instances or post-restart
+    if (dbRef) {
+      try {
+        const snapshot = await Promise.race([
+          dbRef.child('users').once('value'),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Firebase connection timeout')), 2000))
+        ]);
+        const fbUsers = snapshot.val();
+        if (fbUsers) {
+          localCache.users = { ...localCache.users, ...fbUsers };
+          saveLocalBackup();
+          if (isEmail) {
+            for (const key of Object.keys(localCache.users)) {
+              const u = localCache.users[key];
+              if (u && u.email && u.email.trim().toLowerCase() === cleanIdent) {
+                return u;
+              }
+            }
+          } else {
+            if (cleanPhone) {
+              for (const key of Object.keys(localCache.users)) {
+                const u = localCache.users[key];
+                if (u && u.phone && normalizePhoneNumber(u.phone) === cleanPhone) {
+                  return u;
+                }
+              }
+            }
+            for (const key of Object.keys(localCache.users)) {
+              const u = localCache.users[key];
+              if (u && u.email && u.email.trim().toLowerCase() === cleanIdent) {
+                return u;
+              }
+            }
+          }
+        }
+      } catch (err) {}
+    }
+    return null;
   },
 
   async getUserByEmail(email) {
-    if (!email) return null;
-    const cleanEmail = email.toLowerCase().trim();
-    for (const key of Object.keys(localCache.users)) {
-      if (localCache.users[key].email && localCache.users[key].email.toLowerCase().trim() === cleanEmail) {
-        return localCache.users[key];
-      }
-    }
-    return null;
+    return this.getUserByIdentifier(email);
+  },
+
+  async getUserByPhone(phone) {
+    return this.getUserByIdentifier(phone);
   },
 
   async getUserByVirtualAccount(accNum) {

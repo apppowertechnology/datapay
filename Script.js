@@ -220,7 +220,7 @@ async function authFetch(endpoint, options = {}) {
     const data = await res.json();
 
     if (res.status === 401 || res.status === 403) {
-      if (data.message && (data.message.includes('expired') || data.message.includes('required') || data.message.includes('Invalid'))) {
+      if (endpoint !== '/auth/login' && endpoint !== '/auth/register' && data.message && (data.message.includes('expired') || data.message.includes('required') || data.message.includes('Invalid') || data.message.includes('denied'))) {
         logoutUser(false);
         showToast('Your session has expired. Please sign in.', 'warning');
       }
@@ -786,7 +786,7 @@ function setupEventListeners() {
   // 2. LOGIN SUBMISSION
   document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim();
+    const identifier = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const rememberMe = document.getElementById('rememberMe').checked;
 
@@ -796,7 +796,7 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email: identifier, identifier, password })
     });
 
     btn.disabled = false;
@@ -820,7 +820,7 @@ function setupEventListeners() {
   let recoveryResetToken = null;
   document.getElementById('recoveryVerifyForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('recEmail').value.trim();
+    const identifier = document.getElementById('recEmail').value.trim();
     const nextOfKinAnswer = document.getElementById('recNextOfKin').value.trim();
 
     const btn = document.getElementById('recVerifyBtn');
@@ -829,7 +829,7 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/recover-verify', {
       method: 'POST',
-      body: JSON.stringify({ email, nextOfKinAnswer })
+      body: JSON.stringify({ email: identifier, identifier, nextOfKinAnswer })
     });
 
     btn.disabled = false;
