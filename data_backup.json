@@ -26,12 +26,12 @@
       "transactionPinHash": "$2a$10$w4ivh3gfOW.sH4tPX8fhJe1.6kLms1Yxu5z9xvM6/.lvRK5cuzUAS",
       "role": "user",
       "status": "active",
-      "walletBalance": 50,
-      "totalDeposited": 0,
+      "walletBalance": 150,
+      "totalDeposited": 100,
       "totalAirtimeSpent": 50,
       "totalDataSpent": 0,
       "createdAt": "2026-09-09T14:04:32.258Z",
-      "updatedAt": "2026-09-30T23:21:52.776Z"
+      "updatedAt": "2026-10-02T13:21:59.062Z"
     }
   },
   "transactions": {
@@ -149,6 +149,16 @@
       "status": "Successful",
       "description": "MTN Airtime Recharge (₦50) to 09161041419",
       "createdAt": "2026-09-30T23:21:55.110Z"
+    },
+    "T841805786785142": {
+      "id": "T841805786785142",
+      "userId": "usr_a25ac8a17325",
+      "type": "deposit",
+      "amount": 100,
+      "description": "Paystack Deposit (₦100.00)",
+      "status": "Successful",
+      "balanceAfter": 150,
+      "createdAt": "2026-10-02T13:21:59.101Z"
     }
   },
   "deposits": {},

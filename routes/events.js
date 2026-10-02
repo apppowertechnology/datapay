@@ -972,19 +972,24 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
     // Charge to creator = ₦20
     // Provider fee = ₦10
     // STRICTWALLET profit = ₦10
+    // Fixed stamp duty = ₦50 for withdrawals >= ₦10,000
     const charge = 20.00;
     const providerFee = 10.00;
     const profit = 10.00;
-    const totalDeduction = Math.round((withdrawAmount + charge) * 100) / 100;
+    const stampDuty = withdrawAmount >= 10000 ? 50.00 : 0.00;
+    const totalDeduction = Math.round((withdrawAmount + charge + stampDuty) * 100) / 100;
 
     // Check Organizer Wallet Balance
     const wallet = await db.getOrganizerWallet(user.id);
     const availableBalance = parseFloat(wallet.balance || 0);
 
     if (availableBalance < totalDeduction) {
+      const feeDetails = stampDuty > 0
+        ? `including ₦20 withdrawal fee and ₦50 stamp duty`
+        : `including ₦20 withdrawal fee`;
       return res.status(400).json({
         success: false,
-        message: `Insufficient Event Creator Wallet balance. Available: ₦${availableBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}, Required (including ₦20 withdrawal fee): ₦${totalDeduction.toLocaleString('en-NG', { minimumFractionDigits: 2 })}.`
+        message: `Insufficient Event Creator Wallet balance. Available: ₦${availableBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}, Required (${feeDetails}): ₦${totalDeduction.toLocaleString('en-NG', { minimumFractionDigits: 2 })}.`
       });
     }
 
@@ -1001,6 +1006,7 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
       userEmail: user.email,
       amount: withdrawAmount,
       charge: charge,
+      stampDuty: stampDuty,
       providerFee: providerFee,
       profit: 0, // only credited upon confirmed success
       totalDeducted: totalDeduction,

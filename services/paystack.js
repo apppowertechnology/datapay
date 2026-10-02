@@ -44,9 +44,15 @@ async function verifyTransaction(reference) {
   if (!data || !data.data) {
     throw new Error('Paystack verification failed');
   }
+  // Use requested_amount (intended wallet deposit) if available;
+  // otherwise subtract any customer-paid Paystack transaction fee from the total amount charged.
+  const depositKobo = (data.data.requested_amount && data.data.requested_amount > 0)
+    ? data.data.requested_amount
+    : (data.data.fees ? (data.data.amount - data.data.fees) : data.data.amount);
+
   return {
     status: data.data.status,
-    amount: data.data.amount / 100,
+    amount: depositKobo / 100,
     email: data.data.customer.email
   };
 }

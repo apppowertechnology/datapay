@@ -29,9 +29,12 @@ const State = {
 };
 
 // API Base URL (Relative /api for local development & same-origin production)
-const API_BASE = (window.location.protocol.startsWith('http') && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || !window.location.origin.includes('datapay.onrender.com')))
-  ? '/api'
-  : 'https://datapay.onrender.com/api';
+const API_BASE =
+  (window.location.hostname === 'localhost' ||
+   window.location.hostname === '127.0.0.1')
+    ? '/api'
+    : 'https://datapay.onrender.com/api';
+
 
 
 // HTML Escape Utility
@@ -3597,6 +3600,7 @@ async function openWithdrawalModal() {
   document.getElementById('wthNameEnquiryRef').value = '';
   document.getElementById('wthAccountNameDisplay').innerText = 'Enter 10-digit account number to verify owner name...';
   document.getElementById('wthAccountNameDisplay').style.color = 'var(--text-muted)';
+  calculateWithdrawalTotal();
 
   openModal('eventWithdrawModal');
   loadStrowalletBanks();
@@ -3640,7 +3644,25 @@ async function loadStrowalletBanks(force = false) {
 }
 
 function calculateWithdrawalTotal() {
-  // Amount + 20 fee
+  const amountInput = document.getElementById('wthAmount');
+  const stampDutyDisplay = document.getElementById('wthStampDutyDisplay');
+  const totalDeductionDisplay = document.getElementById('wthTotalDeductionDisplay');
+  const amount = parseFloat(amountInput ? amountInput.value : 0);
+
+  const stampDuty = (!isNaN(amount) && amount >= 10000) ? 50 : 0;
+  if (stampDutyDisplay) {
+    stampDutyDisplay.innerText = `₦${stampDuty}`;
+  }
+
+  if (totalDeductionDisplay) {
+    if (!isNaN(amount) && amount > 0) {
+      const charge = 20.00;
+      const total = Math.round((amount + charge + stampDuty) * 100) / 100;
+      totalDeductionDisplay.innerText = formatNaira(total);
+    } else {
+      totalDeductionDisplay.innerText = '₦0.00';
+    }
+  }
 }
 
 function onBankSelectionChange() {
@@ -3861,8 +3883,9 @@ function showEventWithdrawalReceipt(wth) {
   let badgeClass = isSuccess ? 'badge-success' : isFailed ? 'badge-danger' : 'badge-warning';
   let badgeIcon = isSuccess ? '<i class="fa-solid fa-circle-check"></i>' : isFailed ? '<i class="fa-solid fa-circle-xmark"></i>' : '<i class="fa-solid fa-clock"></i>';
 
-  const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20)));
+  const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20) + (wth.stampDuty || 0)));
   const fee = parseFloat(wth.charge || 20.00);
+  const stampDuty = parseFloat(wth.stampDuty || 0);
   const sent = parseFloat(wth.amount || 0);
 
   const txDate = wth.createdAt ? new Date(wth.createdAt) : new Date();
@@ -3911,6 +3934,11 @@ function showEventWithdrawalReceipt(wth) {
         <span style="color: var(--text-muted);">Withdrawal Charge:</span>
         <strong style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(fee)}</strong>
       </div>
+      ${stampDuty > 0 ? `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Stamp Duty:</span>
+        <strong style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(stampDuty)}</strong>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 6px;">
         <span style="color: var(--text-muted);">Amount Sent:</span>
         <strong style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 0.95rem;">${formatNaira(sent)}</strong>
