@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>STRICTWALLET — Administrator Management Console</title>
   <meta name="description" content="STRICTWALLET Master Administrative Dashboard for managing users, transactions, pricing, and support.">
   
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="Image.png">
-  <link rel="apple-touch-icon" href="Image.png">
+  <link rel="icon" type="image/png" href="/Image.png">
+  <link rel="apple-touch-icon" href="/Image.png">
 
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,7 +19,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
   
   <!-- Chart.js for Admin Analytics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -581,7 +583,7 @@
             <div class="card-header">
               <div>
                 <h3 class="card-title"><i class="fa-solid fa-scale-balanced" style="color: var(--accent-emerald);"></i> Event Creator Withdrawal Economics</h3>
-                <p class="card-subtitle">STRICTWALLET charges ₦20 per withdrawal. Strowallet fee is ₦10. Net platform profit is ₦10 per successful payout.</p>
+                <p class="card-subtitle">STRICTWALLET charges ₦20 fee (+ ₦50 stamp duty on ₦10,000+). Strowallet fee is ₦10. Platform profit is ₦10 (or ₦60 with stamp duty) per successful payout.</p>
               </div>
               <button class="btn btn-outline btn-sm" onclick="loadAdminEventsAnalytics()">
                 <i class="fa-solid fa-rotate"></i> Refresh
@@ -610,7 +612,7 @@
               <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--accent-emerald);">
                 <div style="font-size: 0.75rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">STRICTWALLET Net Profit</div>
                 <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);" id="admStatNetWithdrawalProfit">₦0.00</div>
-                <div style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 2px;">₦10 / completed transfer</div>
+                <div style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 2px;">₦10 / ₦60 per transfer</div>
               </div>
             </div>
           </div>
@@ -659,6 +661,7 @@
                     <th>Creator Name</th>
                     <th>Amount</th>
                     <th>Charge (₦20)</th>
+                    <th>Stamp Duty</th>
                     <th>Cost (₦10)</th>
                     <th>STRICTWALLET Profit</th>
                     <th>Destination Bank</th>
@@ -1048,6 +1051,6 @@
   </div>
 
   <!-- Admin JavaScript Logic -->
-  <script src="admin.js"></script>
+  <script src="/admin.js"></script>
 </body>
 </html>

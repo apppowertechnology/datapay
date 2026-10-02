@@ -4,8 +4,16 @@
   <meta charset="UTF-8">
   <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>STRICTWALLET — Accessible. Secure. In Control.</title>
-  <meta name="description" content="STRICTWALLET is a digital wallet platform for airtime purchase, data bundles, dedicated virtual bank accounts, and seamless automated funding.">
+  <title>STRICTWALLET — Accessible. Secure. In Control. | Telecoms & Event Ticketing</title>
+  <meta name="description" content="STRICTWALLET is a digital wallet platform in Nigeria for instant airtime, affordable data bundles, dedicated virtual bank accounts, and complete event ticketing and creator payouts.">
+  <link rel="canonical" href="https://strictwallet.com.ng/">
+
+  <!-- Open Graph / SEO -->
+  <meta property="og:title" content="STRICTWALLET — Accessible. Secure. In Control.">
+  <meta property="og:description" content="Instant airtime, wholesale data bundles, and all-in-one event creation & ticketing in Nigeria.">
+  <meta property="og:url" content="https://strictwallet.com.ng/">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://strictwallet.com.ng/Image.png">
   
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="/Image.png">
@@ -43,6 +51,39 @@
   <!-- ================= AUTHENTICATION MODALS / VIEWS ================= -->
   <div id="authWrapper" class="auth-wrapper">
     
+    <!-- Public Header Navigation -->
+    <header class="public-header" style="width: 100%; border-radius: var(--radius-lg); margin-bottom: 24px;">
+      <nav class="public-nav">
+        <a href="/" class="public-brand">
+          <img src="/Image.png" alt="STRICTWALLET Logo">
+          <div class="public-brand-text">
+            <span class="public-brand-title">STRICTWALLET</span>
+            <span class="public-brand-motto">Accessible. Secure. In Control.</span>
+          </div>
+        </a>
+
+        <button class="public-mobile-toggle" onclick="document.querySelector('#homeNavLinks').classList.toggle('open')" aria-label="Toggle navigation">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <ul class="public-nav-links" id="homeNavLinks">
+          <li><a href="/" class="active">Home</a></li>
+          <li><a href="/services">Services</a></li>
+          <li><a href="/how-it-works">How It Works</a></li>
+          <li><a href="/event-ticketing">Event Ticketing</a></li>
+          <li><a href="/data-airtime">Data & Airtime</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/about">About Us</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+
+        <div class="public-nav-actions">
+          <button type="button" class="btn btn-outline btn-sm" onclick="showAuthScreen('loginCard')">Sign In</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="showAuthScreen('registerCard')">Get Started</button>
+        </div>
+      </nav>
+    </header>
+
     <!-- 1. LOGIN CARD -->
     <div id="loginCard" class="auth-card">
       <div class="auth-header">
@@ -236,6 +277,38 @@
         Remember your password? <a href="#" id="toLoginFromRecLink" style="font-weight: 700;">Back to Sign In</a>
       </div>
     </div>
+
+    <!-- Public Overview Showcase Banner -->
+    <section class="public-home-showcase" style="width: 100%; max-width: 900px; margin: 30px auto 16px; text-align: center;">
+      <div style="background: rgba(17, 27, 54, 0.75); border: 1px solid var(--border-color); border-radius: var(--radius-xl); padding: 30px 24px; box-shadow: var(--shadow-md);">
+        <h1 style="font-size: 1.45rem; color: #FFF; margin-bottom: 8px;">
+          STRICTWALLET — <span style="color: var(--accent-emerald);">Accessible. Secure. In Control.</span>
+        </h1>
+        <p style="color: var(--text-secondary); font-size: 0.92rem; max-width: 720px; margin: 0 auto 20px; line-height: 1.6;">
+          Your trusted digital platform in Nigeria for automated mobile data bundles, instant airtime top-ups, secure Paystack wallet funding, and comprehensive event creation with anti-fraud QR ticket scanning and direct bank withdrawals.
+        </p>
+        
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+          <a href="/services" class="btn btn-outline btn-sm"><i class="fa-solid fa-list-check"></i> What We Offer</a>
+          <a href="/how-it-works" class="btn btn-outline btn-sm"><i class="fa-solid fa-route"></i> How It Works</a>
+          <a href="/event-ticketing" class="btn btn-outline btn-sm"><i class="fa-solid fa-ticket"></i> Event Ticketing</a>
+          <a href="/data-airtime" class="btn btn-outline btn-sm"><i class="fa-solid fa-wifi"></i> Data & Airtime</a>
+          <a href="/pricing" class="btn btn-outline btn-sm"><i class="fa-solid fa-tags"></i> Pricing & Fees</a>
+          <a href="/about" class="btn btn-outline btn-sm"><i class="fa-solid fa-circle-info"></i> About Us</a>
+          <a href="/contact" class="btn btn-outline btn-sm"><i class="fa-solid fa-headset"></i> Contact Support</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Public Footer Links on Auth View -->
+    <footer style="width: 100%; max-width: 900px; margin: 10px auto 0; padding-top: 18px; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 0.82rem; color: var(--text-muted);">
+      <div>&copy; 2026 STRICTWALLET. All rights reserved.</div>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <a href="/terms" style="color: var(--text-secondary); text-decoration: none;">Terms & Conditions</a>
+        <a href="/privacy" style="color: var(--text-secondary); text-decoration: none;">Privacy Policy</a>
+        <a href="/contact" style="color: var(--text-secondary); text-decoration: none;">Contact Us</a>
+      </div>
+    </footer>
   </div>
 
   <!-- ================= MAIN APPLICATION DASHBOARD ================= -->

@@ -971,12 +971,12 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
     // Withdrawal Fee Calculations:
     // Charge to creator = ₦20
     // Provider fee = ₦10
-    // STRICTWALLET profit = ₦10
-    // Fixed stamp duty = ₦50 for withdrawals >= ₦10,000
+    // Stamp duty = ₦50 for withdrawals >= ₦10,000 (₦0 for < ₦10,000)
+    // STRICTWALLET profit = (charge - providerFee) + stampDuty (₦10 if < ₦10,000; ₦60 if >= ₦10,000)
     const charge = 20.00;
     const providerFee = 10.00;
-    const profit = 10.00;
     const stampDuty = withdrawAmount >= 10000 ? 50.00 : 0.00;
+    const profit = Math.round(((charge - providerFee) + stampDuty) * 100) / 100;
     const totalDeduction = Math.round((withdrawAmount + charge + stampDuty) * 100) / 100;
 
     // Check Organizer Wallet Balance

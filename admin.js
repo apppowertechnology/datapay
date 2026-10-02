@@ -1198,7 +1198,7 @@ function renderAdminWithdrawalsTable(withdrawals) {
   if (!tbody) return;
 
   if (withdrawals.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;">No withdrawal requests recorded yet.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--text-muted); padding: 30px;">No withdrawal requests recorded yet.</td></tr>`;
     return;
   }
 
@@ -1207,7 +1207,19 @@ function renderAdminWithdrawalsTable(withdrawals) {
     if (w.status === 'Successful') statusBadge = 'badge-success';
     if (w.status === 'Failed') statusBadge = 'badge-error';
 
-    const profitDisplay = w.status === 'Successful' ? '₦10.00' : '₦0.00';
+    const amt = parseFloat(w.amount || 0);
+    const charge = parseFloat(w.charge || 20.00);
+    const providerFee = parseFloat(w.providerFee || 10.00);
+    const stampDuty = parseFloat(w.stampDuty !== undefined ? w.stampDuty : (amt >= 10000 ? 50.00 : 0.00));
+    
+    let profit = (charge - providerFee) + stampDuty;
+    if (w.profit !== undefined && w.profit !== null) {
+      const storedProfit = parseFloat(w.profit);
+      if (storedProfit >= profit) {
+        profit = storedProfit;
+      }
+    }
+    const profitDisplay = w.status === 'Successful' ? formatNaira(profit) : '₦0.00';
 
     return `
       <tr>
@@ -1215,6 +1227,7 @@ function renderAdminWithdrawalsTable(withdrawals) {
         <td><strong>${w.userFullName || '-'}</strong></td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: #FFF;">${formatNaira(w.amount)}</td>
         <td style="color: var(--accent-emerald);">₦20.00</td>
+        <td style="color: ${stampDuty > 0 ? 'var(--status-warning)' : 'var(--text-muted)'}; font-weight: 600;">${formatNaira(stampDuty)}</td>
         <td style="color: var(--status-warning);">₦10.00</td>
         <td style="color: var(--accent-emerald); font-weight: 700;">${profitDisplay}</td>
         <td>${w.bankName || w.bankCode}</td>

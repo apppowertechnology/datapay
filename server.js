@@ -67,9 +67,16 @@ app.get('/api/settings/social-links', async (req, res) => {
   }
 });
 
-// Catch-all route to serve index.html for frontend routing
+// Clean URLs for Admin and Public Information Pages
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+const publicPages = ['about', 'services', 'event-ticketing', 'data-airtime', 'pricing', 'how-it-works', 'terms', 'privacy', 'contact'];
+publicPages.forEach(page => {
+  app.get(`/${page}`, (req, res) => {
+    res.sendFile(path.join(__dirname, `${page}.html`));
+  });
 });
 
 app.get('*', (req, res) => {

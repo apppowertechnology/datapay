@@ -448,6 +448,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     showAuthScreen('loginCard');
     if (sharedTarget) {
       renderSharedInvitationBanner(sharedTarget);
+      if (sharedTarget.type === 'event') {
+        openEventDetails(sharedTarget.id);
+      }
     }
   }
 });
@@ -4105,8 +4108,9 @@ function downloadEventWithdrawalReceiptPdf(wth) {
 
     // Details Rows
     const startY = 104;
-    const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20)));
+    const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20) + (wth.stampDuty || 0)));
     const fee = parseFloat(wth.charge || 20.00);
+    const stampDuty = parseFloat(wth.stampDuty || 0);
     const sent = parseFloat(wth.amount || 0);
 
     const maskedAcc = wth.accountNumber ? `•••• •••• ${wth.accountNumber.toString().slice(-4)}` : 'N/A';
@@ -4120,6 +4124,7 @@ function downloadEventWithdrawalReceiptPdf(wth) {
       ['Transaction Type', 'Event Creator Wallet Withdrawal'],
       ['Gross Amount Withdrawn', `NGN ${gross.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
       ['Organizer Withdrawal Charge', `NGN ${fee.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
+      ...(stampDuty > 0 ? [['Statutory Stamp Duty', `NGN ${stampDuty.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`]] : []),
       ['Net Amount Sent', `NGN ${sent.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
       ['Destination Bank', wth.bankName || 'N/A'],
       ['Account Name', wth.accountName || 'N/A'],

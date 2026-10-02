@@ -739,13 +739,15 @@ router.get('/events/analytics', async (req, res) => {
     // Every successful withdrawal:
     // Organizer charge = ₦20
     // Provider fee = ₦10
-    // STRICTWALLET profit = ₦10
+    // Stamp duty = ₦50 for withdrawals >= ₦10,000 (₦0 for < ₦10,000)
+    // STRICTWALLET profit = (charge - providerFee) + stampDuty (₦10 if < ₦10k; ₦60 if >= ₦10k)
     let totalWithdrawalCount = withdrawals.length;
     let successfulWithdrawals = 0;
     let failedWithdrawals = 0;
     let pendingWithdrawals = 0;
 
     let totalWithdrawalCharges = 0;
+    let totalWithdrawalStampDuty = 0;
     let totalProviderFees = 0;
     let totalWithdrawalProfit = 0;
     let totalWithdrawalVolume = 0;
@@ -757,9 +759,18 @@ router.get('/events/analytics', async (req, res) => {
         totalWithdrawalVolume += amt;
         const charge = parseFloat(w.charge || 20.00);
         const providerFee = parseFloat(w.providerFee || 10.00);
-        const profit = parseFloat(w.profit || (charge - providerFee));
+        const stampDuty = parseFloat(w.stampDuty !== undefined ? w.stampDuty : (amt >= 10000 ? 50.00 : 0.00));
+        
+        let profit = (charge - providerFee) + stampDuty;
+        if (w.profit !== undefined && w.profit !== null) {
+          const storedProfit = parseFloat(w.profit);
+          if (storedProfit >= profit) {
+            profit = storedProfit;
+          }
+        }
 
         totalWithdrawalCharges += charge;
+        totalWithdrawalStampDuty += stampDuty;
         totalProviderFees += providerFee;
         totalWithdrawalProfit += profit;
       } else if (w.status === 'Failed') {
@@ -770,6 +781,7 @@ router.get('/events/analytics', async (req, res) => {
     });
 
     totalWithdrawalCharges = Math.round(totalWithdrawalCharges * 100) / 100;
+    totalWithdrawalStampDuty = Math.round(totalWithdrawalStampDuty * 100) / 100;
     totalProviderFees = Math.round(totalProviderFees * 100) / 100;
     totalWithdrawalProfit = Math.round(totalWithdrawalProfit * 100) / 100;
     totalWithdrawalVolume = Math.round(totalWithdrawalVolume * 100) / 100;
@@ -795,6 +807,7 @@ router.get('/events/analytics', async (req, res) => {
           pending: pendingWithdrawals,
           totalVolume: totalWithdrawalVolume,
           totalChargesCollected: totalWithdrawalCharges,
+          totalStampDutyCollected: totalWithdrawalStampDuty,
           totalProviderFees: totalProviderFees,
           totalStrictwalletProfit: totalWithdrawalProfit
         }
