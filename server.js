@@ -27,7 +27,12 @@ app.use((req, res, next) => {
 
 // Public health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+  const dbStatus = db.isReady() ? 'connected' : 'disconnected';
+  res.status(200).json({
+    status: 'OK',
+    database: dbStatus,
+    databaseUrl: process.env.FIREBASE_DATABASE_URL || 'https://strictwallet-b8418-default-rtdb.firebaseio.com/'
+  });
 });
 
 // Temporary endpoint to check outbound server IP
@@ -99,6 +104,7 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     await db.init();
+    console.log('[Server Startup] Firebase Realtime Database initialization succeeded.');
 
     // Ensure Default Administrator exists and has matching credentials
     const adminEmail = (process.env.DEFAULT_ADMIN_EMAIL || 'admin@strictwallet.com').toLowerCase();
@@ -147,17 +153,20 @@ async function startServer() {
         await db.saveUser(existingAdmin);
       }
     }
-
-    app.listen(PORT, () => {
-      console.log(`====================================================`);
-      console.log(` STRICTWALLET FinTech Engine Running on Port ${PORT}`);
-      console.log(` Web Interface: http://localhost:${PORT}`);
-      console.log(` Admin Portal:  http://localhost:${PORT}/admin.html`);
-      console.log(`====================================================`);
-    });
   } catch (err) {
-    console.error('Failed to start server:', err);
+    console.error(`[Server Startup] Firebase initialization FAILED: ${err.message}`);
+    console.error('[Server Startup] Database-dependent operations are BLOCKED until valid Firebase credentials are provided.');
+    console.error('[Server Startup] Local data_backup.json fallback is strictly disabled in production.');
   }
+
+  app.listen(PORT, () => {
+    console.log(`====================================================`);
+    console.log(` STRICTWALLET FinTech Engine Running on Port ${PORT}`);
+    console.log(` Web Interface: http://localhost:${PORT}`);
+    console.log(` Admin Portal:  http://localhost:${PORT}/admin.html`);
+    console.log(` Database Ready: ${db.isReady() ? 'YES (Live RTDB)' : 'NO (Connection Required)'}`);
+    console.log(`====================================================`);
+  });
 }
 
 startServer();

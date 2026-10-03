@@ -1,3 +1,8 @@
 node_modules/
 .env
+.env.*
+serviceAccountKey.json
+*serviceAccount*.json
 eAccountkey.json
+*.pem
+*.key
