@@ -84,6 +84,11 @@ publicPages.forEach(page => {
   });
 });
 
+// SPA Dynamic Event & Ticket Deep-Link Routes
+app.get(['/events', '/events/*', '/event', '/event/*', '/tickets', '/tickets/*', '/ticket', '/ticket/*'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ success: false, message: 'API route not found' });
