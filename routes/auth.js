@@ -9,6 +9,20 @@ const { authenticateToken } = require('../middleware/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'strictwallet_jwt_secret_production_ready_key_2026_!98#x';
 
+function normalizePhoneNumber(phone) {
+  if (typeof db.normalizePhoneNumber === 'function') {
+    return db.normalizePhoneNumber(phone);
+  }
+  if (!phone) return '';
+  let cleaned = String(phone).replace(/[^\d+]/g, '');
+  if (cleaned.startsWith('+234')) {
+    cleaned = '0' + cleaned.slice(4);
+  } else if (cleaned.startsWith('234') && cleaned.length === 13) {
+    cleaned = '0' + cleaned.slice(3);
+  }
+  return cleaned;
+}
+
 // Password Strength Validator
 function validateStrongPassword(password) {
   if (!password || password.length < 8) return false;
@@ -30,8 +44,14 @@ router.post('/register', async (req, res) => {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!emailRegex.test(cleanEmail)) {
       return res.status(400).json({ success: false, message: 'Please provide a valid email address.' });
+    }
+
+    const cleanPhone = normalizePhoneNumber(phone);
+    if (!cleanPhone || cleanPhone.length < 10) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid phone number.' });
     }
 
     if (password !== confirmPassword) {
@@ -45,10 +65,16 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    const existingUser = await db.getUserByEmail(email);
+    // Check if user already exists by email
+    const existingUser = await db.getUserByEmail(cleanEmail);
     if (existingUser) {
       return res.status(400).json({ success: false, message: 'An account with this email address already exists.' });
+    }
+
+    // Check if user already exists by phone
+    const existingPhone = await db.getUserByPhone(cleanPhone);
+    if (existingPhone) {
+      return res.status(400).json({ success: false, message: 'An account with this phone number already exists.' });
     }
 
     // Hash password & nextOfKin
@@ -58,12 +84,12 @@ router.post('/register', async (req, res) => {
 
     const userId = `usr_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
 
-// Prepare initial user object
+    // Prepare initial user object
     const newUser = {
       id: userId,
       fullName: fullName.trim(),
-      email: email.trim().toLowerCase(),
-      phone: phone.trim(),
+      email: cleanEmail,
+      phone: cleanPhone,
       passwordHash: passwordHash,
       nextOfKin: nextOfKin.trim(), // Stored for security verification
       nextOfKinAnswer: nextOfKinAnswer,
@@ -74,22 +100,30 @@ router.post('/register', async (req, res) => {
       totalDeposited: 0.00,
       totalAirtimeSpent: 0.00,
       totalDataSpent: 0.00,
-      // Virtual account fields removed per new Paystack funding model
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
+    // Save to Firebase Realtime Database
     await db.saveUser(newUser);
 
-    // Generate JWT token
+    // Confirm that the user record was persistently written to Firebase RTDB
+    const verifiedUser = await db.getUserById(newUser.id);
+    if (!verifiedUser || !verifiedUser.id || verifiedUser.email !== cleanEmail) {
+      const dbErr = new Error(`Firebase persistence confirmation failed for user ${newUser.id} (${cleanEmail})`);
+      dbErr.isDbError = true;
+      throw dbErr;
+    }
+
+    // Generate JWT token only after verified write
     const token = jwt.sign(
-      { id: newUser.id, email: newUser.email, role: newUser.role },
+      { id: verifiedUser.id, email: verifiedUser.email, role: verifiedUser.role },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
     // Return safe user object (without passwordHash)
-    const { passwordHash: _, nextOfKinAnswer: __, ...safeUser } = newUser;
+    const { passwordHash: _, nextOfKinAnswer: __, ...safeUser } = verifiedUser;
 
     return res.status(201).json({
       success: true,
@@ -99,6 +133,12 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     console.error('[Registration Error]:', error);
+    if (error.isDbError || (error.message && (error.message.includes('Firebase') || error.message.includes('Database connection') || error.message.includes('persistence')))) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database service is temporarily unavailable. Your account was not registered. Please try again shortly.'
+      });
+    }
     return res.status(500).json({ success: false, message: 'Server error occurred during registration. Please try again.' });
   }
 });
@@ -144,6 +184,12 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('[Login Error]:', error);
+    if (error.isDbError || (error.message && (error.message.includes('Firebase') || error.message.includes('Database connection')))) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database service is temporarily unavailable. Please try again shortly.'
+      });
+    }
     return res.status(500).json({ success: false, message: 'Unable to sign in. Please try again later.' });
   }
 });

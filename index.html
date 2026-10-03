@@ -1370,73 +1370,82 @@
       </div>
       <div class="modal-body">
         
-        <!-- Event Banner Header -->
-        <div id="edBannerWrap" style="width: 100%; height: 200px; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 16px; background: #060B19;">
-          <img id="edBannerImg" src="/Image.png" alt="Event Banner" style="width: 100%; height: 100%; object-fit: cover;">
+        <!-- Loading State Indicator -->
+        <div id="edLoadingState" style="display: none; text-align: center; padding: 50px 20px;">
+          <i class="fa-solid fa-spinner fa-spin fa-2x" style="color: var(--accent-emerald);"></i>
+          <p style="margin-top: 14px; color: var(--text-secondary); font-size: 0.95rem;">Loading event details...</p>
         </div>
 
-        <h2 id="edTitle" style="font-size: 1.35rem; font-weight: 800; color: #FFF; margin-bottom: 8px;">Event Title</h2>
+        <!-- Event Content Container -->
+        <div id="edContentState">
+          <!-- Event Banner Header -->
+          <div id="edBannerWrap" style="width: 100%; height: 200px; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 16px; background: #060B19;">
+            <img id="edBannerImg" src="/Image.png" alt="Event Banner" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
 
-        <!-- Event Metadata Badges -->
-        <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0, 0, 0, 0.25); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 16px;">
-          <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
-            <i class="fa-solid fa-location-dot" style="color: var(--accent-emerald); width: 16px;"></i>
-            <strong id="edVenue" style="color: #FFF;">Venue Location</strong>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
-            <i class="fa-solid fa-calendar-day" style="color: var(--accent-emerald); width: 16px;"></i>
-            <span id="edDateTime">Date & Time</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-muted);" id="edSalesPeriodRow">
-            <i class="fa-solid fa-clock" style="color: var(--accent-blue-light); width: 16px;"></i>
-            <span id="edSalesPeriod">Sales period info</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-secondary);">
-            <i class="fa-solid fa-user-tie" style="color: var(--accent-purple); width: 16px;"></i>
-            <span>Organized by: <strong id="edCreatorName" style="color: #FFF;">Event Creator</strong></span>
-          </div>
-        </div>
+          <h2 id="edTitle" style="font-size: 1.35rem; font-weight: 800; color: #FFF; margin-bottom: 8px;">Event Title</h2>
 
-        <!-- Description -->
-        <div style="margin-bottom: 20px;">
-          <h4 style="font-size: 0.88rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">About this Event</h4>
-          <p id="edDescription" style="font-size: 0.9rem; color: #FFF; line-height: 1.5; white-space: pre-line;">Event description details...</p>
-        </div>
-
-        <!-- Shareable Event Link -->
-        <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-          <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; color: var(--accent-blue-light);" id="edShareLinkText">
-            https://strictwallet.com/events/alvan-night
+          <!-- Event Metadata Badges -->
+          <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0, 0, 0, 0.25); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-location-dot" style="color: var(--accent-emerald); width: 16px;"></i>
+              <strong id="edVenue" style="color: #FFF;">Venue Location</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-calendar-day" style="color: var(--accent-emerald); width: 16px;"></i>
+              <span id="edDateTime">Date & Time</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-muted);" id="edSalesPeriodRow">
+              <i class="fa-solid fa-clock" style="color: var(--accent-blue-light); width: 16px;"></i>
+              <span id="edSalesPeriod">Sales period info</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-user-tie" style="color: var(--accent-purple); width: 16px;"></i>
+              <span>Organized by: <strong id="edCreatorName" style="color: #FFF;">Event Creator</strong></span>
+            </div>
           </div>
-          <button class="btn btn-outline btn-sm" id="btnCopyShareLink" onclick="copyEventShareLink()" style="padding: 4px 10px; font-size: 0.78rem;">
-            <i class="fa-regular fa-copy"></i> Copy Link
-          </button>
-        </div>
 
-        <!-- Available Ticket Types Selection -->
-        <div style="margin-bottom: 18px;">
-          <h4 style="font-size: 0.92rem; color: var(--accent-emerald); margin-bottom: 10px;">
-            <i class="fa-solid fa-ticket"></i> Select Ticket Type
-          </h4>
-          <div id="edTicketTypesList" style="display: flex; flex-direction: column; gap: 10px;">
-            <!-- Dynamically populated ticket options -->
+          <!-- Description -->
+          <div style="margin-bottom: 20px;">
+            <h4 style="font-size: 0.88rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">About this Event</h4>
+            <p id="edDescription" style="font-size: 0.9rem; color: #FFF; line-height: 1.5; white-space: pre-line;">Event description details...</p>
           </div>
-        </div>
 
-        <!-- Ticket Holder Full Name (Optional Field) -->
-        <div class="form-group" style="background: rgba(13, 21, 45, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px;">
-          <label class="form-label" for="ticketHolderFullName" style="display: flex; justify-content: space-between; align-items: center;">
-            <span><i class="fa-solid fa-user-tag"></i> Ticket Holder's Full Name</span>
-            <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: normal;">(Optional)</span>
-          </label>
-          <input type="text" id="ticketHolderFullName" placeholder="e.g. John Okoro (If buying for someone else)">
-          <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
-            * If left empty, your registered STRICTWALLET account name will automatically be assigned as the ticket holder.
+          <!-- Shareable Event Link -->
+          <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; color: var(--accent-blue-light);" id="edShareLinkText">
+              https://strictwallet.com/event/alvan-night
+            </div>
+            <button class="btn btn-outline btn-sm" id="btnCopyShareLink" onclick="copyEventShareLink()" style="padding: 4px 10px; font-size: 0.78rem;">
+              <i class="fa-regular fa-copy"></i> Copy Link
+            </button>
+          </div>
+
+          <!-- Available Ticket Types Selection -->
+          <div style="margin-bottom: 18px;">
+            <h4 style="font-size: 0.92rem; color: var(--accent-emerald); margin-bottom: 10px;">
+              <i class="fa-solid fa-ticket"></i> Select Ticket Type
+            </h4>
+            <div id="edTicketTypesList" style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- Dynamically populated ticket options -->
+            </div>
+          </div>
+
+          <!-- Ticket Holder Full Name (Optional Field) -->
+          <div class="form-group" style="background: rgba(13, 21, 45, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px;">
+            <label class="form-label" for="ticketHolderFullName" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fa-solid fa-user-tag"></i> Ticket Holder's Full Name</span>
+              <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: normal;">(Optional)</span>
+            </label>
+            <input type="text" id="ticketHolderFullName" placeholder="e.g. John Okoro (If buying for someone else)">
+            <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
+              * If left empty, your registered STRICTWALLET account name will automatically be assigned as the ticket holder.
+            </div>
           </div>
         </div>
 
       </div>
-      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+      <div class="modal-footer" id="edModalFooter" style="display: flex; justify-content: space-between; align-items: center;">
         <div>
           <span style="font-size: 0.75rem; color: var(--text-muted);">Total Price:</span>
           <div id="edSelectedPriceDisplay" style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</div>
@@ -1444,6 +1453,32 @@
         <button class="btn btn-primary" id="btnProceedTicketPurchase" onclick="initiateTicketPurchase()">
           <i class="fa-solid fa-cart-shopping"></i> Purchase Ticket
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8b. EVENT NOT FOUND MODAL -->
+  <div id="eventNotFoundModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 460px; text-align: center;">
+      <div class="modal-header" style="justify-content: flex-end; border-bottom: none; padding-bottom: 0;">
+        <button class="modal-close-btn" onclick="closeEventNotFoundModal(true)">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 0; padding-bottom: 24px;">
+        <div style="width: 72px; height: 72px; border-radius: 50%; background: rgba(239, 68, 68, 0.12); border: 2px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <i class="fa-solid fa-calendar-xmark" style="font-size: 2.2rem; color: var(--status-error);"></i>
+        </div>
+        <h3 style="font-size: 1.3rem; font-weight: 800; color: #FFF; margin-bottom: 10px;">Event Not Found</h3>
+        <p id="eventNotFoundSlugMsg" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px;">
+          The event you're looking for doesn't exist, has ended, or the link is invalid.
+        </p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" onclick="closeEventNotFoundModal(true)">
+            <i class="fa-solid fa-house"></i> Home
+          </button>
+          <button type="button" class="btn btn-primary" id="btnNotFoundExplore" onclick="handleNotFoundExplore()">
+            <i class="fa-solid fa-compass"></i> Explore Events
+          </button>
+        </div>
       </div>
     </div>
   </div>

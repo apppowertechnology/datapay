@@ -37,7 +37,12 @@ function resolveCredential() {
   if (process.env.FIREBASE_SERVICE_ACCOUNT_PATH) {
     const resolvedPath = path.resolve(process.env.FIREBASE_SERVICE_ACCOUNT_PATH);
     if (fs.existsSync(resolvedPath)) {
-      return cert(require(resolvedPath));
+      try {
+        const fileContent = fs.readFileSync(resolvedPath, 'utf8');
+        return cert(JSON.parse(fileContent));
+      } catch (e) {
+        return cert(require(resolvedPath));
+      }
     }
     throw new Error(`Configured FIREBASE_SERVICE_ACCOUNT_PATH file not found at: ${resolvedPath}`);
   }
@@ -45,7 +50,12 @@ function resolveCredential() {
   // 4. Default local serviceAccountKey.json file in root
   const defaultLocalPath = path.join(__dirname, 'serviceAccountKey.json');
   if (fs.existsSync(defaultLocalPath)) {
-    return cert(require(defaultLocalPath));
+    try {
+      const fileContent = fs.readFileSync(defaultLocalPath, 'utf8');
+      return cert(JSON.parse(fileContent));
+    } catch (e) {
+      return cert(require(defaultLocalPath));
+    }
   }
 
   // 5. Google Application Default Credentials path
@@ -195,6 +205,10 @@ const defaultSocialLinks = {
 
 const db = {
   async init() {
+    if (isFirebaseAvailable && dbRef !== null) {
+      return true;
+    }
+
     const rawUrl = process.env.FIREBASE_DATABASE_URL || DEFAULT_DATABASE_URL;
     const dbUrl = rawUrl.endsWith('/') ? rawUrl : `${rawUrl}/`;
     console.log(`[Firebase Init] Target Database URL: ${dbUrl}`);
@@ -210,17 +224,22 @@ const db = {
 
     if (!credential) {
       isFirebaseAvailable = false;
-      const errMsg = '[Firebase Init] Missing Firebase Admin credentials. Provide FIREBASE_SERVICE_ACCOUNT_KEY (env JSON/base64) or place serviceAccountKey.json in the project root.';
+      const errMsg = '[Firebase Init] Missing Firebase Admin credentials. Provide FIREBASE_SERVICE_ACCOUNT_KEY (env JSON/base64), FIREBASE_SERVICE_ACCOUNT_PATH, or place serviceAccountKey.json in the project root.';
       console.error(errMsg);
       console.error('[Firebase Init] Production database is offline. Fallback to local files is disabled.');
       throw new Error(errMsg);
     }
 
     try {
-      firebaseApp = initializeApp({
-        credential,
-        databaseURL: dbUrl
-      });
+      const { getApps, getApp } = require('firebase-admin/app');
+      if (getApps().length > 0) {
+        firebaseApp = getApp();
+      } else {
+        firebaseApp = initializeApp({
+          credential,
+          databaseURL: dbUrl
+        });
+      }
       dbRef = getDatabase(firebaseApp).ref();
     } catch (err) {
       isFirebaseAvailable = false;
@@ -228,12 +247,13 @@ const db = {
       throw err;
     }
 
-    // Verify connectivity to the NEW Realtime Database
+    // Verify connectivity to the Realtime Database
     console.log('[Firebase Init] Verifying connectivity to Firebase Realtime Database...');
     try {
       await verifyReachability(DB_TIMEOUT_MS);
       isFirebaseAvailable = true;
       console.log(`[Firebase Init] SUCCESS: Connected and verified reachability to Firebase Realtime Database: ${dbUrl}`);
+      return true;
     } catch (reachErr) {
       isFirebaseAvailable = false;
       console.error(`[Firebase Init] FAILED: Could not reach Firebase Realtime Database: ${reachErr.message}`);
@@ -288,11 +308,34 @@ const db = {
   },
 
   async getUserByEmail(email) {
-    return this.getUserByIdentifier(email);
+    if (!email) return null;
+    ensureConnected();
+    const cleanEmail = email.trim().toLowerCase();
+    const snap = await executeWithRetry(() => dbRef.child('users').once('value'));
+    const users = snap.val() || {};
+    for (const key of Object.keys(users)) {
+      const u = users[key];
+      if (u && u.email && u.email.trim().toLowerCase() === cleanEmail) {
+        return u;
+      }
+    }
+    return null;
   },
 
   async getUserByPhone(phone) {
-    return this.getUserByIdentifier(phone);
+    if (!phone) return null;
+    ensureConnected();
+    const cleanPhone = normalizePhoneNumber(phone);
+    if (!cleanPhone) return null;
+    const snap = await executeWithRetry(() => dbRef.child('users').once('value'));
+    const users = snap.val() || {};
+    for (const key of Object.keys(users)) {
+      const u = users[key];
+      if (u && u.phone && normalizePhoneNumber(u.phone) === cleanPhone) {
+        return u;
+      }
+    }
+    return null;
   },
 
   async getUserByVirtualAccount(accNum) {
@@ -320,7 +363,16 @@ const db = {
     user.updatedAt = new Date().toISOString();
     const sanitized = sanitizeForFirebase(user);
     await executeWithRetry(() => dbRef.child(`users/${user.id}`).set(sanitized));
-    return user;
+
+    // Confirm persistent write in Firebase Realtime Database
+    const verifySnap = await executeWithRetry(() => dbRef.child(`users/${user.id}`).once('value'));
+    const saved = verifySnap.val();
+    if (!saved || saved.id !== user.id) {
+      const err = new Error(`Firebase write confirmation failed for user ${user.id}`);
+      err.isDbError = true;
+      throw err;
+    }
+    return saved;
   },
 
   // ==========================================
@@ -636,21 +688,37 @@ const db = {
     if (!id) return null;
     ensureConnected();
     const snap = await executeWithRetry(() => dbRef.child(`events/${id}`).once('value'));
-    return snap.val();
+    const directVal = snap.val();
+    if (directVal) return directVal;
+
+    // Fallback: search by case-insensitive id or slug
+    const cleanId = id.toString().toLowerCase().trim();
+    const allSnap = await executeWithRetry(() => dbRef.child('events').once('value'));
+    const all = allSnap.val() || {};
+    for (const key of Object.keys(all)) {
+      const ev = all[key];
+      if (ev) {
+        if (ev.id && ev.id.toString().toLowerCase().trim() === cleanId) return ev;
+        if (ev.slug && ev.slug.toString().toLowerCase().trim() === cleanId) return ev;
+      }
+    }
+    return null;
   },
 
   async getEventBySlug(slug) {
     if (!slug) return null;
     ensureConnected();
-    const cleanSlug = slug.toLowerCase().trim();
+    const cleanSlug = slug.toString().toLowerCase().trim();
     const snap = await executeWithRetry(() => dbRef.child('events').once('value'));
     const all = snap.val() || {};
     for (const key of Object.keys(all)) {
       const ev = all[key];
-      if (ev && ev.slug && ev.slug.toLowerCase().trim() === cleanSlug) {
-        return ev;
+      if (ev) {
+        if (ev.slug && ev.slug.toString().toLowerCase().trim() === cleanSlug) return ev;
+        if (ev.id && ev.id.toString().toLowerCase().trim() === cleanSlug) return ev;
       }
     }
+    if (all[slug]) return all[slug];
     return null;
   },
 
@@ -874,5 +942,7 @@ const db = {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 };
+
+db.normalizePhoneNumber = normalizePhoneNumber;
 
 module.exports = db;

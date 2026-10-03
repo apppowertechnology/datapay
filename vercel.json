@@ -1,0 +1,81 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about.html"
+    },
+    {
+      "source": "/services",
+      "destination": "/services.html"
+    },
+    {
+      "source": "/event-ticketing",
+      "destination": "/event-ticketing.html"
+    },
+    {
+      "source": "/data-airtime",
+      "destination": "/data-airtime.html"
+    },
+    {
+      "source": "/pricing",
+      "destination": "/pricing.html"
+    },
+    {
+      "source": "/how-it-works",
+      "destination": "/how-it-works.html"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
+    },
+    {
+      "source": "/privacy",
+      "destination": "/privacy.html"
+    },
+    {
+      "source": "/contact",
+      "destination": "/contact.html"
+    },
+    {
+      "source": "/events",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/events/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/event",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/event/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tickets",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/tickets/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/ticket",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/ticket/:path*",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
