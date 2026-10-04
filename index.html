@@ -410,6 +410,9 @@
         <!-- ================= 1. DASHBOARD VIEW ================= -->
         <section id="viewDashboard" class="view-section active-view">
           
+          <!-- Active Pending Deposit Alert Banner -->
+          <div id="activePendingDepositBanner" style="display: none; margin-bottom: 20px;"></div>
+
           <div class="grid-cards-2">
             
             <!-- Hero Wallet Balance Card -->
@@ -704,8 +707,10 @@
                 <select id="txFilterStatus" style="width: 140px; padding: 8px 12px;">
                   <option value="all">All Statuses</option>
                   <option value="Successful">Successful</option>
+                  <option value="Processing">Processing</option>
                   <option value="Pending">Pending</option>
                   <option value="Failed">Failed</option>
+                  <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
             </div>
@@ -714,13 +719,13 @@
               <table class="table-custom">
                 <thead>
                   <tr>
-                    <th>Tx ID</th>
+                    <th>Reference</th>
                     <th>Type</th>
-                    <th>Recipient / Account</th>
+                    <th>Channel / Details</th>
                     <th>Amount</th>
                     <th>Date & Time</th>
                     <th>Status</th>
-                    <th>Receipt</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="allTransactionsTableBody">
@@ -1240,6 +1245,53 @@
             Process Payment
           </button>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6B. PAYMENT STATUS MODAL (PAYSTACK DEPOSIT LIFECYCLE) -->
+  <div id="paymentStatusModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 440px; text-align: center;">
+      <div class="modal-header" style="justify-content: flex-end; border-bottom: none; padding-bottom: 0;">
+        <button class="modal-close-btn" onclick="closePaymentStatusModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="paymentStatusModalBody" style="padding-top: 0;">
+        <div id="paymentStatusSpinner" style="margin-bottom: 16px;">
+          <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 3rem; color: var(--accent-blue);"></i>
+        </div>
+        <h3 id="paymentStatusTitle" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px; color: #FFF;">
+          Verifying Payment...
+        </h3>
+        <p id="paymentStatusDesc" style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+          Please wait while we confirm your transaction with Paystack.
+        </p>
+
+        <div id="paymentStatusDetailsCard" style="background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: left; margin-bottom: 20px; font-size: 0.85rem; display: none;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Amount:</span>
+            <strong id="psmAmount" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Reference:</span>
+            <code id="psmReference" style="color: #FFF; font-size: 0.8rem;">-</code>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Status:</span>
+            <span id="psmBadge" class="badge badge-info">Processing</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;" id="paymentStatusActions">
+          <button type="button" class="btn btn-secondary" id="btnPsmClose" onclick="closePaymentStatusModal()" style="flex: 1; min-width: 100px;">
+            Dismiss
+          </button>
+          <button type="button" class="btn btn-primary" id="btnPsmRetry" style="display: none; flex: 1; min-width: 120px;" onclick="retryCheckPendingDeposit()">
+            <i class="fa-solid fa-rotate-right"></i> Check Again
+          </button>
+          <button type="button" class="btn btn-outline" id="btnPsmCancel" style="display: none; flex: 1; min-width: 120px; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="cancelCurrentPendingDeposit()">
+            <i class="fa-solid fa-xmark"></i> Cancel Attempt
+          </button>
+        </div>
       </div>
     </div>
   </div>

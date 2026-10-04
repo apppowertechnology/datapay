@@ -393,6 +393,15 @@ const db = {
     return snap.val();
   },
 
+  async updateTransaction(id, updates) {
+    if (!id) return null;
+    ensureConnected();
+    const sanitized = sanitizeForFirebase(updates);
+    await executeWithRetry(() => dbRef.child(`transactions/${id}`).update(sanitized));
+    const snap = await executeWithRetry(() => dbRef.child(`transactions/${id}`).once('value'));
+    return snap.val();
+  },
+
   async getTransactionByReference(ref) {
     if (!ref) return null;
     ensureConnected();
@@ -400,7 +409,7 @@ const db = {
     const all = snap.val() || {};
     for (const key of Object.keys(all)) {
       const tx = all[key];
-      if (tx && (tx.providerReference === ref || tx.reference === ref)) {
+      if (tx && (tx.id === ref || tx.providerReference === ref || tx.reference === ref || tx.paystackReference === ref)) {
         return tx;
       }
     }
@@ -436,14 +445,24 @@ const db = {
     return dep;
   },
 
+  async updateDeposit(id, updates) {
+    if (!id) return null;
+    ensureConnected();
+    const sanitized = sanitizeForFirebase(updates);
+    await executeWithRetry(() => dbRef.child(`deposits/${id}`).update(sanitized));
+    const snap = await executeWithRetry(() => dbRef.child(`deposits/${id}`).once('value'));
+    return snap.val();
+  },
+
   async getDepositByReference(ref) {
     if (!ref) return null;
     ensureConnected();
     const snap = await executeWithRetry(() => dbRef.child('deposits').once('value'));
     const all = snap.val() || {};
     for (const key of Object.keys(all)) {
-      if (all[key] && all[key].providerReference === ref) {
-        return all[key];
+      const dep = all[key];
+      if (dep && (dep.id === ref || dep.reference === ref || dep.providerReference === ref || dep.paystackReference === ref)) {
+        return dep;
       }
     }
     return null;

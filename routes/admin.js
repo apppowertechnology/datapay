@@ -3,6 +3,8 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { requireAdmin } = require('../middleware/auth');
+const paystackService = require('../services/paystack');
+const { reconcileDepositTransaction } = require('../services/paymentReconciliation');
 
 // Apply admin protection to all routes in this router
 router.use(requireAdmin);
@@ -876,6 +878,204 @@ router.delete('/events/:id', async (req, res) => {
   } catch (error) {
     console.error('[Admin Delete Event Error]:', error);
     return res.status(500).json({ success: false, message: 'Failed to delete event.' });
+  }
+});
+
+// ==========================================
+// 12. ADMIN PAYMENTS & DEPOSITS MANAGEMENT
+// ==========================================
+
+// List recent deposits with filtering & pagination
+router.get('/deposits', async (req, res) => {
+  try {
+    const { status, search, limit = 50 } = req.query;
+    const allTxs = await db.getAllTransactions();
+    let deposits = allTxs.filter(t => t && t.type === 'deposit');
+
+    if (status && status !== 'all') {
+      deposits = deposits.filter(t => t.status && t.status.toLowerCase() === status.toLowerCase());
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      deposits = deposits.filter(t =>
+        (t.id && t.id.toLowerCase().includes(q)) ||
+        (t.providerReference && t.providerReference.toLowerCase().includes(q)) ||
+        (t.paystackReference && t.paystackReference.toLowerCase().includes(q)) ||
+        (t.userEmail && t.userEmail.toLowerCase().includes(q)) ||
+        (t.userFullName && t.userFullName.toLowerCase().includes(q)) ||
+        (t.userId && t.userId.toLowerCase().includes(q))
+      );
+    }
+
+    // Attach user balance & overview info where available
+    const pageLimit = parseInt(limit, 10) || 50;
+    const paginated = deposits.slice(0, pageLimit);
+
+    return res.json({
+      success: true,
+      total: deposits.length,
+      deposits: paginated
+    });
+  } catch (error) {
+    console.error('[Admin Deposits List Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve deposits ledger.' });
+  }
+});
+
+// Search & live-verify payment by reference, email, phone, or userId
+router.get('/deposits/lookup', async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query || !query.trim()) {
+      return res.status(400).json({ success: false, message: 'Search query is required.' });
+    }
+
+    const q = query.trim();
+    const qLower = q.toLowerCase();
+
+    // 1. Try finding transaction directly by reference / ID
+    let tx = await db.getTransactionByReference(q);
+
+    // 2. If not found by exact reference, search all transactions
+    if (!tx) {
+      const allTxs = await db.getAllTransactions();
+      tx = allTxs.find(t =>
+        t && t.type === 'deposit' && (
+          (t.id && t.id.toLowerCase() === qLower) ||
+          (t.providerReference && t.providerReference.toLowerCase() === qLower) ||
+          (t.paystackReference && t.paystackReference.toLowerCase() === qLower)
+        )
+      );
+    }
+
+    // 3. If still not found, check if query matches a user's email, phone, or id
+    let matchedUser = null;
+    if (tx && tx.userId) {
+      matchedUser = await db.getUserById(tx.userId);
+    } else {
+      matchedUser = await db.getUserByEmail(qLower);
+      if (!matchedUser) {
+        matchedUser = await db.getUserByPhone(q);
+      }
+      if (!matchedUser) {
+        matchedUser = await db.getUserById(q);
+      }
+      if (matchedUser && !tx) {
+        const userTxs = await db.getUserTransactions(matchedUser.id);
+        tx = userTxs.find(t => t && t.type === 'deposit') || null;
+      }
+    }
+
+    // If query or tx has a Paystack reference, attempt live Paystack verify
+    let livePaystack = null;
+    let paystackError = null;
+    const refToCheck = tx ? (tx.providerReference || tx.paystackReference || tx.id) : q;
+
+    try {
+      livePaystack = await paystackService.verifyTransaction(refToCheck);
+    } catch (err) {
+      paystackError = err.message || 'Payment not found on Paystack or invalid reference format.';
+    }
+
+    // Determine status and recommendation
+    let walletCredited = tx ? (tx.credited === true || tx.status === 'Successful') : false;
+    let recommendation = '';
+
+    if (livePaystack && livePaystack.status === 'success') {
+      if (walletCredited) {
+        recommendation = 'SUCCESSFUL — Wallet Credited';
+      } else {
+        recommendation = 'SUCCESSFUL — Awaiting Wallet Reconciliation';
+      }
+    } else if (livePaystack && livePaystack.status === 'failed') {
+      recommendation = 'FAILED';
+    } else if (livePaystack && (livePaystack.status === 'processing' || livePaystack.status === 'ongoing')) {
+      recommendation = 'PROCESSING';
+    } else if (tx && tx.status === 'Processing') {
+      recommendation = 'PROCESSING';
+    } else if (tx && tx.status === 'Cancelled') {
+      recommendation = 'CANCELLED';
+    } else if (tx && tx.status === 'Failed') {
+      recommendation = 'FAILED';
+    } else if (tx && tx.status === 'Pending') {
+      recommendation = 'PENDING';
+    } else if (livePaystack && livePaystack.status === 'abandoned') {
+      recommendation = 'PENDING — Awaiting Customer Completion';
+    } else {
+      recommendation = tx ? tx.status.toUpperCase() : 'NOT FOUND';
+    }
+
+    return res.json({
+      success: true,
+      transaction: tx || null,
+      user: matchedUser ? {
+        id: matchedUser.id,
+        fullName: matchedUser.fullName,
+        email: matchedUser.email,
+        phone: matchedUser.phoneNumber,
+        walletBalance: matchedUser.walletBalance
+      } : null,
+      livePaystack: livePaystack ? {
+        status: livePaystack.status,
+        amount: livePaystack.amount,
+        chargedAmount: livePaystack.chargedAmount,
+        fee: livePaystack.fee,
+        channel: livePaystack.channel,
+        cardType: livePaystack.cardType,
+        bank: livePaystack.bank,
+        paidAt: livePaystack.paidAt,
+        gatewayResponse: livePaystack.gatewayResponse,
+        customerEmail: livePaystack.email
+      } : null,
+      paystackError: paystackError,
+      walletCredited,
+      recommendation
+    });
+  } catch (error) {
+    console.error('[Admin Deposit Lookup Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to look up deposit information.' });
+  }
+});
+
+// Admin manual reconciliation action (Idempotent & Audit-logged)
+router.post('/deposits/reconcile', async (req, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference || !reference.trim()) {
+      return res.status(400).json({ success: false, message: 'Payment reference is required for reconciliation.' });
+    }
+
+    const ref = reference.trim();
+
+    // Perform idempotent reconciliation with per-reference mutex
+    const result = await reconcileDepositTransaction({
+      reference: ref,
+      triggeredBy: `admin_${req.user.id}`
+    });
+
+    // Record admin audit log
+    await db.addAuditLog({
+      id: `LOG-${Date.now()}`,
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      action: 'ADMIN_PAYMENT_RECONCILE',
+      description: `Admin reconciled reference "${ref}". Outcome: ${result.status} (Credited: ${result.credited ? 'YES' : 'NO / Already Credited'}) - ${result.message || ''}`,
+      createdAt: new Date().toISOString()
+    });
+
+    return res.json({
+      success: result.success,
+      status: result.status,
+      credited: result.credited || false,
+      alreadyCredited: result.alreadyCredited || false,
+      message: result.message || (result.status === 'Successful' ? 'Payment reconciled and credited successfully.' : `Payment status is ${result.status}.`),
+      transaction: result.transaction,
+      newBalance: result.newBalance
+    });
+  } catch (error) {
+    console.error('[Admin Deposit Reconcile Error]:', error);
+    return res.status(500).json({ success: false, message: 'Reconciliation failed: ' + error.message });
   }
 });
 

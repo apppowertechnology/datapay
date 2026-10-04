@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <base href="/">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Bundles & Airtime Top-Up — STRICTWALLET</title>
+  <meta name="description" content="Browse live data plans and buy affordable bundles for MTN, Airtel, Glo, and 9mobile with instant automated delivery on STRICTWALLET. Zero surcharge on airtime.">
+  <link rel="canonical" href="https://strictwallet.com.ng/data-airtime">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Data Bundles & Airtime Top-Up — STRICTWALLET">
+  <meta property="og:description" content="Live data plan pricing and instant 24/7 airtime top-ups across all Nigerian networks.">
+  <meta property="og:url" content="https://strictwallet.com.ng/data-airtime">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://strictwallet.com.ng/Image.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="/Image.png">
+  <link rel="apple-touch-icon" href="/Image.png">
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .network-tab-btn {
+      padding: 10px 20px;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      font-weight: 700;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: var(--transition);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .network-tab-btn.active, .network-tab-btn:hover {
+      background: rgba(0, 208, 156, 0.15);
+      border-color: var(--accent-emerald);
+      color: #FFF;
+    }
+    .data-plan-card {
+      background: rgba(13, 21, 45, 0.6);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 18px;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .data-plan-card:hover {
+      border-color: rgba(0, 208, 156, 0.4);
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body class="public-page-body">
+
+  <!-- Header Navigation -->
+  <header class="public-header">
+    <nav class="public-nav">
+      <a href="/" class="public-brand">
+        <img src="/Image.png" alt="STRICTWALLET Logo">
+        <div class="public-brand-text">
+          <span class="public-brand-title">STRICTWALLET</span>
+          <span class="public-brand-motto">Accessible. Secure. In Control.</span>
+        </div>
+      </a>
+
+      <button class="public-mobile-toggle" onclick="document.querySelector('.public-nav-links').classList.toggle('open')" aria-label="Toggle navigation">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+      <ul class="public-nav-links">
+        <li><a href="/">Home</a></li>
+        <li><a href="/services">Services</a></li>
+        <li><a href="/how-it-works">How It Works</a></li>
+        <li><a href="/event-ticketing">Event Ticketing</a></li>
+        <li><a href="/data-airtime" class="active">Data & Airtime</a></li>
+        <li><a href="/pricing">Pricing</a></li>
+        <li><a href="/about">About Us</a></li>
+        <li><a href="/contact">Contact</a></li>
+      </ul>
+
+      <div class="public-nav-actions">
+        <a href="/" class="btn btn-outline btn-sm">Sign In</a>
+        <a href="/" class="btn btn-primary btn-sm">Buy Data Now</a>
+      </div>
+    </nav>
+  </header>
+
+  <!-- Main Content -->
+  <main class="public-container">
+    <section class="public-hero">
+      <div class="public-hero-pill">
+        <i class="fa-solid fa-bolt"></i> Live Telecom Pricing
+      </div>
+      <h1>Data Bundles & Airtime <span>Catalog</span></h1>
+      <p>
+        Browse real-time data bundle prices across MTN, Airtel, Glo, and 9mobile. Automated 24/7 delivery with 0% surcharge on airtime refills.
+      </p>
+    </section>
+
+    <!-- Airtime Service Information Card -->
+    <section style="margin-top: 10px;">
+      <div class="card" style="padding: 28px 24px; border-left: 4px solid var(--accent-emerald);">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+          <div>
+            <h3 style="color: #FFF; font-size: 1.2rem; margin-bottom: 4px;">
+              <i class="fa-solid fa-phone" style="color: var(--accent-emerald);"></i> Airtime Recharge Terms
+            </h3>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin: 0;">
+              Available for MTN, Airtel, Glo, and 9mobile. Recharges from <strong>₦50</strong> up to <strong>₦50,000</strong>.
+            </p>
+          </div>
+          <div style="display: flex; gap: 20px; align-items: center;">
+            <div style="text-align: right;">
+              <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Customer Surcharge</div>
+              <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00 (Face Value)</div>
+            </div>
+            <a href="/" class="btn btn-primary btn-sm"><i class="fa-solid fa-bolt"></i> Buy Airtime</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Network Tabs Filter -->
+    <section style="margin-top: 40px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 20px;">
+        <div>
+          <h2 style="font-size: 1.4rem; color: #FFF; margin-bottom: 4px;">Active Mobile Data Plans</h2>
+          <p style="color: var(--text-secondary); font-size: 0.88rem; margin: 0;">Live selling prices directly synchronized with STRICTWALLET's purchasing engine.</p>
+        </div>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;" id="networkTabs">
+          <button class="network-tab-btn active" onclick="switchNetworkTab('MTN', this)">
+            <i class="fa-solid fa-signal" style="color: #FBBF24;"></i> MTN
+          </button>
+          <button class="network-tab-btn" onclick="switchNetworkTab('AIRTEL', this)">
+            <i class="fa-solid fa-signal" style="color: #EF4444;"></i> AIRTEL
+          </button>
+          <button class="network-tab-btn" onclick="switchNetworkTab('GLO', this)">
+            <i class="fa-solid fa-signal" style="color: #10B981;"></i> GLO
+          </button>
+          <button class="network-tab-btn" onclick="switchNetworkTab('9MOBILE', this)">
+            <i class="fa-solid fa-signal" style="color: #84CC16;"></i> 9MOBILE
+          </button>
+        </div>
+      </div>
+
+      <!-- Live Loading / Status Indicator -->
+      <div id="dataPlansStatus" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px; display: flex; align-items: center; gap: 6px;">
+        <i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Showing active platform plans
+      </div>
+
+      <!-- Plans Grid Container -->
+      <div id="dataPlansGrid" class="public-grid-3" style="margin-top: 0;">
+        <!-- Pre-rendered verified active plans from dataPlans.json as baseline (dynamically updated by JS) -->
+        <div class="data-plan-card" data-network="MTN">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #FBBF24; font-weight: 700;">MTN SME</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">7-days</span>
+            </div>
+            <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">1.0 GB SME</h4>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦480.00</div>
+            <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+          </div>
+        </div>
+
+        <div class="data-plan-card" data-network="MTN">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #FBBF24; font-weight: 700;">MTN SME</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">30 days</span>
+            </div>
+            <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">2.0 GB SME</h4>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦950.00</div>
+            <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+          </div>
+        </div>
+
+        <div class="data-plan-card" data-network="MTN">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #FBBF24; font-weight: 700;">MTN SME</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">30 days</span>
+            </div>
+            <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">3.0 GB SME</h4>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦1,425.00</div>
+            <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+          </div>
+        </div>
+
+        <div class="data-plan-card" data-network="MTN">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #FBBF24; font-weight: 700;">MTN SME</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">30 days</span>
+            </div>
+            <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">5.0 GB SME</h4>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦2,375.00</div>
+            <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+          </div>
+        </div>
+
+        <div class="data-plan-card" data-network="MTN">
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <span class="badge" style="background: rgba(251, 191, 36, 0.15); color: #FBBF24; font-weight: 700;">MTN SME</span>
+              <span style="font-size: 0.78rem; color: var(--text-muted);">30 days</span>
+            </div>
+            <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">10.0 GB SME</h4>
+          </div>
+          <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+            <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦4,750.00</div>
+            <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom CTA -->
+    <section style="margin-top: 60px; text-align: center; background: linear-gradient(135deg, rgba(13, 21, 45, 0.9) 0%, rgba(17, 27, 54, 0.9) 100%); border: 1px solid rgba(0, 208, 156, 0.25); border-radius: var(--radius-xl); padding: 40px 24px;">
+      <h3 style="color: #FFF; font-size: 1.5rem; margin-bottom: 8px;">Need Data or Airtime Right Now?</h3>
+      <p style="color: var(--text-secondary); max-width: 600px; margin: 0 auto 20px;">
+        Sign in to your STRICTWALLET account to top up in seconds with your 4-digit PIN.
+      </p>
+      <a href="/" class="btn btn-primary"><i class="fa-solid fa-arrow-right-to-bracket"></i> Go to Dashboard</a>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="public-footer">
+    <div class="public-footer-inner">
+      <div class="public-footer-brand">
+        <h4>STRICTWALLET</h4>
+        <p>Accessible. Secure. In Control. Dedicated wallet platform for data, airtime, and event creator ticketing solutions.</p>
+      </div>
+
+      <div class="public-footer-col">
+        <h5>Quick Links</h5>
+        <ul>
+          <li><a href="/">Home / Sign In</a></li>
+          <li><a href="/about">About Us</a></li>
+          <li><a href="/services">Our Services</a></li>
+          <li><a href="/how-it-works">How It Works</a></li>
+          <li><a href="/pricing">Pricing & Fees</a></li>
+          <li><a href="/contact">Contact Support</a></li>
+        </ul>
+      </div>
+
+      <div class="public-footer-col">
+        <h5>Networks</h5>
+        <ul>
+          <li><a href="javascript:void(0)" onclick="switchNetworkTab('MTN', document.querySelectorAll('.network-tab-btn')[0])">MTN Plans</a></li>
+          <li><a href="javascript:void(0)" onclick="switchNetworkTab('AIRTEL', document.querySelectorAll('.network-tab-btn')[1])">Airtel Plans</a></li>
+          <li><a href="javascript:void(0)" onclick="switchNetworkTab('GLO', document.querySelectorAll('.network-tab-btn')[2])">Glo Plans</a></li>
+          <li><a href="javascript:void(0)" onclick="switchNetworkTab('9MOBILE', document.querySelectorAll('.network-tab-btn')[3])">9mobile Plans</a></li>
+        </ul>
+      </div>
+
+      <div class="public-footer-col">
+        <h5>Legal & Trust</h5>
+        <ul>
+          <li><a href="/terms">Terms & Conditions</a></li>
+          <li><a href="/privacy">Privacy Policy</a></li>
+          <li><a href="/contact">Help Desk</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="public-footer-bottom">
+      <div>&copy; 2026 STRICTWALLET. All rights reserved.</div>
+      <div>Designed with precision for seamless everyday transactions.</div>
+    </div>
+  </footer>
+
+  <!-- Floating WhatsApp Support Button -->
+  <a href="https://wa.me/2349161041419?text=Hello%20STRICTWALLET%20Customer%20Care,%20I%20need%20assistance." target="_blank" rel="noopener noreferrer" class="floating-whatsapp-btn" id="floatingWhatsappBtn" title="Chat on WhatsApp (09161041419)">
+    <i class="fa-brands fa-whatsapp"></i>
+    <span>WhatsApp Support</span>
+  </a>
+
+  <!-- Dynamic Live Pricing Fetch Script -->
+  <script>
+    let allLivePlans = [];
+    let currentNetwork = 'MTN';
+
+    function formatNaira(num) {
+      return '₦' + parseFloat(num || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function renderPlans(network) {
+      currentNetwork = network;
+      const grid = document.getElementById('dataPlansGrid');
+      if (!grid) return;
+
+      const filtered = allLivePlans.filter(p => p.network && p.network.toUpperCase() === network.toUpperCase() && p.status === 'active');
+      if (filtered.length === 0) {
+        // Fallback for network if empty in live list
+        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--text-muted); padding: 30px;">No active plans found for ${network}.</div>`;
+        return;
+      }
+
+      // Display top 15 plans for the selected network
+      grid.innerHTML = filtered.slice(0, 18).map(p => {
+        let badgeColor = '#FBBF24';
+        if (p.network.toUpperCase() === 'AIRTEL') badgeColor = '#EF4444';
+        if (p.network.toUpperCase() === 'GLO') badgeColor = '#10B981';
+        if (p.network.toUpperCase() === '9MOBILE') badgeColor = '#84CC16';
+
+        return `
+          <div class="data-plan-card" data-network="${p.network}">
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span class="badge" style="background: rgba(255,255,255,0.06); color: ${badgeColor}; font-weight: 700;">${p.network} ${p.planType || 'DATA'}</span>
+                <span style="font-size: 0.78rem; color: var(--text-muted);">${p.validity || '30 days'}</span>
+              </div>
+              <h4 style="color: #FFF; font-size: 1.15rem; margin-bottom: 4px;">${p.name || (p.size + ' ' + (p.planType || ''))}</h4>
+            </div>
+            <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: baseline;">
+              <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(p.sellingPrice)}</div>
+              <a href="/" class="btn btn-outline btn-sm" style="padding: 3px 10px; font-size: 0.78rem;">Purchase</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function switchNetworkTab(net, btn) {
+      document.querySelectorAll('.network-tab-btn').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+      renderPlans(net);
+    }
+
+    // Dynamic Live Fetch from /api/wallet/data-plans
+    document.addEventListener('DOMContentLoaded', async () => {
+      const apiBase = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? '/api'
+        : 'https://datapay.onrender.com/api';
+
+      try {
+        const res = await fetch(`${apiBase}/wallet/data-plans`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.plans && data.plans.length > 0) {
+            allLivePlans = data.plans;
+            const statusEl = document.getElementById('dataPlansStatus');
+            if (statusEl) {
+              statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Live database connected: ${data.plans.length} active plans available`;
+            }
+            renderPlans(currentNetwork);
+          }
+        }
+      } catch (e) {
+        console.log('Using baseline data plans catalog.');
+      }
+    });
+  </script>
+</body>
+</html>

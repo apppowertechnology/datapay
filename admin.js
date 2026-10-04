@@ -14,11 +14,7 @@ const AdminState = {
 };
 
 // API Base URL (Relative /api for local development & same-origin production)
-const API_BASE =
-  (window.location.hostname === 'localhost' ||
-   window.location.hostname === '127.0.0.1')
-    ? '/api'
-    : 'https://datapay.onrender.com/api';
+const API_BASE = '/api';
 
 
 
@@ -160,6 +156,7 @@ function navigateAdminView(viewId) {
     viewAdminOverview: 'Overview & Analytics',
     viewAdminUsers: 'User Management',
     viewAdminTransactions: 'Master Transaction Ledger',
+    viewAdminDeposits: 'Payments & Paystack Deposits Management',
     viewAdminEvents: 'Events & Creator Payouts Management',
     viewAdminPricing: 'Pricing & Profit Matrix',
     viewAdminSupport: 'Support Desk & Tickets',
@@ -171,6 +168,7 @@ function navigateAdminView(viewId) {
   if (viewId === 'viewAdminOverview') loadAdminOverview();
   if (viewId === 'viewAdminUsers') loadAdminUsers();
   if (viewId === 'viewAdminTransactions') loadAdminTransactions();
+  if (viewId === 'viewAdminDeposits') loadAdminDeposits();
   if (viewId === 'viewAdminEvents') loadAdminEventsAnalytics();
   if (viewId === 'viewAdminPricing') loadAdminPricing();
   if (viewId === 'viewAdminSupport') loadAdminSupportTickets();
@@ -268,6 +266,34 @@ function setupAdminEventListeners() {
 
   document.getElementById('adminSupportSearch')?.addEventListener('input', debounce(loadAdminSupportTickets, 300));
   document.getElementById('adminSupportStatusFilter')?.addEventListener('change', loadAdminSupportTickets);
+
+  // Payments & Deposits Management Listeners
+  document.getElementById('adminDepositTableSearch')?.addEventListener('input', debounce(loadAdminDeposits, 300));
+  document.getElementById('adminDepositTableStatus')?.addEventListener('change', loadAdminDeposits);
+  document.getElementById('btnRefreshAdminDeposits')?.addEventListener('click', loadAdminDeposits);
+
+  document.getElementById('btnAdminDepositLookup')?.addEventListener('click', () => {
+    const q = document.getElementById('adminDepositLookupInput')?.value.trim();
+    if (q) lookupAdminDeposit(q);
+  });
+
+  document.getElementById('adminDepositLookupInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const q = e.target.value.trim();
+      if (q) lookupAdminDeposit(q);
+    }
+  });
+
+  document.getElementById('btnAdminDepositLookupClear')?.addEventListener('click', () => {
+    const input = document.getElementById('adminDepositLookupInput');
+    if (input) input.value = '';
+    const resBox = document.getElementById('adminDepositLookupResult');
+    if (resBox) {
+      resBox.style.display = 'none';
+      resBox.innerHTML = '';
+    }
+  });
 
   // Plan Management Search & Filter bindings
   document.getElementById('adminPlanSearch')?.addEventListener('input', debounce(loadAdminPricing, 300));
@@ -1251,4 +1277,227 @@ function filterAdminWithdrawalsTable() {
   );
   renderAdminWithdrawalsTable(filtered);
 }
+
+// ==========================================
+// ADMIN PAYMENTS & DEPOSITS MANAGEMENT
+// ==========================================
+
+async function loadAdminDeposits() {
+  const status = document.getElementById('adminDepositTableStatus')?.value || 'all';
+  const search = document.getElementById('adminDepositTableSearch')?.value.trim() || '';
+  const tbody = document.getElementById('adminDepositsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading deposits ledger...</td></tr>`;
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/deposits?status=${status}&search=${encodeURIComponent(search)}&limit=100`);
+    if (!ok || !data.success) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--status-error); padding: 24px;">Failed to load deposits.</td></tr>`;
+      return;
+    }
+
+    const deposits = data.deposits || [];
+    if (deposits.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No matching deposit records found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = deposits.map(dep => {
+      let badgeClass = 'badge-success';
+      if (dep.status === 'Processing') badgeClass = 'badge-processing';
+      else if (dep.status === 'Pending') badgeClass = 'badge-warning';
+      else if (dep.status === 'Failed') badgeClass = 'badge-danger';
+      else if (dep.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+      const ref = dep.providerReference || dep.paystackReference || dep.reference || dep.id;
+      const credited = dep.credited === true || (dep.status === 'Successful' && dep.credited !== false);
+
+      return `
+        <tr>
+          <td><code style="color: var(--accent-blue-light); font-size: 0.8rem;">${ref}</code></td>
+          <td>
+            <div style="font-weight: 600; color: #FFF;">${dep.userFullName || 'User'}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${dep.userEmail || '-'}</div>
+          </td>
+          <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">
+            ${formatNaira(dep.amount)}
+          </td>
+          <td style="text-transform: capitalize; font-size: 0.82rem; color: var(--text-muted);">
+            ${dep.channel || 'Paystack'}
+          </td>
+          <td><span class="badge ${badgeClass}">${dep.status}</span></td>
+          <td>
+            ${credited
+              ? '<span class="badge badge-success" style="font-size: 0.72rem;"><i class="fa-solid fa-check"></i> YES</span>'
+              : '<span class="badge badge-warning" style="font-size: 0.72rem;">NO</span>'
+            }
+          </td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(dep.createdAt)}</td>
+          <td>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" onclick="quickLookupAdminDeposit('${ref}')" title="Lookup & Live Verify">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </button>
+              ${!credited && dep.status !== 'Cancelled' ? `
+              <button class="btn btn-primary btn-sm" onclick="reconcileAdminDeposit('${ref}')" title="Reconcile & Credit Wallet">
+                <i class="fa-solid fa-check-double"></i>
+              </button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('loadAdminDeposits Error:', err);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--status-error); padding: 24px;">Error connecting to deposits server.</td></tr>`;
+  }
+}
+
+window.quickLookupAdminDeposit = function(ref) {
+  const input = document.getElementById('adminDepositLookupInput');
+  if (input) input.value = ref;
+  lookupAdminDeposit(ref);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+async function lookupAdminDeposit(query) {
+  const resBox = document.getElementById('adminDepositLookupResult');
+  if (!resBox) return;
+
+  resBox.style.display = 'block';
+  resBox.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Checking local records and live Paystack status...</div>`;
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/deposits/lookup?query=${encodeURIComponent(query)}`);
+    if (!ok || !data.success) {
+      resBox.innerHTML = `<div style="color: var(--status-error); padding: 14px;"><i class="fa-solid fa-circle-exclamation"></i> ${data.message || 'Lookup failed'}</div>`;
+      return;
+    }
+
+    const { transaction, user, livePaystack, paystackError, walletCredited, recommendation } = data;
+    const refToReconcile = transaction ? (transaction.providerReference || transaction.paystackReference || transaction.id) : (livePaystack ? query : null);
+
+    let bannerColor = 'rgba(59, 130, 246, 0.15)';
+    let bannerBorder = 'rgba(59, 130, 246, 0.4)';
+    let bannerText = '#60a5fa';
+
+    if (livePaystack && livePaystack.status === 'success') {
+      if (walletCredited) {
+        bannerColor = 'rgba(16, 185, 129, 0.15)';
+        bannerBorder = 'rgba(16, 185, 129, 0.4)';
+        bannerText = 'var(--accent-emerald)';
+      } else {
+        bannerColor = 'rgba(245, 158, 11, 0.15)';
+        bannerBorder = 'rgba(245, 158, 11, 0.4)';
+        bannerText = 'var(--status-warning)';
+      }
+    } else if (livePaystack && livePaystack.status === 'failed') {
+      bannerColor = 'rgba(239, 68, 68, 0.15)';
+      bannerBorder = 'rgba(239, 68, 68, 0.4)';
+      bannerText = 'var(--status-error)';
+    }
+
+    resBox.innerHTML = `
+      <!-- Status Recommendation Banner -->
+      <div style="background: ${bannerColor}; border: 1px solid ${bannerBorder}; color: ${bannerText}; border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <i class="fa-solid fa-shield-halved"></i> <span>${recommendation}</span>
+        </div>
+        ${(livePaystack && livePaystack.status === 'success' && !walletCredited && refToReconcile) ? `
+        <button class="btn btn-primary btn-sm" onclick="reconcileAdminDeposit('${refToReconcile}')">
+          <i class="fa-solid fa-check-double"></i> Reconcile & Credit Wallet (₦${livePaystack.amount})
+        </button>` : ''}
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+        <!-- User Information -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--accent-blue-light); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-user"></i> Customer Account
+          </h4>
+          ${user ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Name:</span> <strong>${user.fullName || '-'}</strong></div>
+              <div><span style="color: var(--text-muted);">Email:</span> <code>${user.email}</code></div>
+              <div><span style="color: var(--text-muted);">Phone:</span> ${user.phone || '-'}</div>
+              <div><span style="color: var(--text-muted);">Current Balance:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(user.walletBalance)}</strong></div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">No matching registered user linked to this search.</p>`}
+        </div>
+
+        <!-- Local STRICTWALLET Record -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--accent-emerald); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-database"></i> STRICTWALLET Database Record
+          </h4>
+          ${transaction ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Tx ID:</span> <code>${transaction.id}</code></div>
+              <div><span style="color: var(--text-muted);">Reference:</span> <code style="color: #FFF;">${transaction.providerReference || transaction.reference}</code></div>
+              <div><span style="color: var(--text-muted);">Amount:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(transaction.amount)}</strong></div>
+              <div><span style="color: var(--text-muted);">Status:</span> <span class="badge ${transaction.status === 'Successful' ? 'badge-success' : transaction.status === 'Pending' ? 'badge-warning' : 'badge-danger'}">${transaction.status}</span></div>
+              <div><span style="color: var(--text-muted);">Wallet Credited:</span> <strong>${walletCredited ? '<span style="color: var(--accent-emerald);">YES</span>' : '<span style="color: var(--status-warning);">NO</span>'}</strong></div>
+              <div><span style="color: var(--text-muted);">Created:</span> ${formatDateTime(transaction.createdAt)}</div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">No transaction record found in local database for this reference.</p>`}
+        </div>
+
+        <!-- Live Paystack Verification -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--status-warning); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-satellite-dish"></i> Live Paystack API Status
+          </h4>
+          ${livePaystack ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Gateway Status:</span> <strong style="text-transform: uppercase; color: ${livePaystack.status === 'success' ? 'var(--accent-emerald)' : 'var(--status-error)'};">${livePaystack.status}</strong></div>
+              <div><span style="color: var(--text-muted);">Net Amount:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(livePaystack.amount)}</strong></div>
+              <div><span style="color: var(--text-muted);">Charged Total:</span> ${formatNaira(livePaystack.chargedAmount)} (Fee: ${formatNaira(livePaystack.fee)})</div>
+              <div><span style="color: var(--text-muted);">Channel:</span> <span style="text-transform: capitalize;">${livePaystack.channel}</span> ${livePaystack.cardType ? `(${livePaystack.cardType})` : ''} ${livePaystack.bank ? `- ${livePaystack.bank}` : ''}</div>
+              <div><span style="color: var(--text-muted);">Gateway Response:</span> <em>${livePaystack.gatewayResponse || 'N/A'}</em></div>
+              <div><span style="color: var(--text-muted);">Paid At:</span> ${livePaystack.paidAt ? formatDateTime(livePaystack.paidAt) : 'N/A'}</div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">${paystackError || 'No live record on Paystack.'}</p>`}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('lookupAdminDeposit Error:', err);
+    resBox.innerHTML = `<div style="color: var(--status-error); padding: 14px;">Error communicating with lookup service.</div>`;
+  }
+}
+
+window.reconcileAdminDeposit = async function(reference) {
+  if (!reference) return;
+  if (!confirm(`Reconcile and credit wallet for transaction reference "${reference}"? This action is idempotent and safe.`)) {
+    return;
+  }
+
+  showAdminToast('Initiating safe payment reconciliation...', 'info');
+
+  try {
+    const { ok, data } = await adminFetch('/admin/deposits/reconcile', {
+      method: 'POST',
+      body: JSON.stringify({ reference })
+    });
+
+    if (ok && data.success) {
+      if (data.alreadyCredited) {
+        showAdminToast(`Reference ${reference} has already been credited. No duplicate credit applied.`, 'warning');
+      } else if (data.credited) {
+        showAdminToast(`Payment successfully reconciled! Wallet credited with new balance: ${formatNaira(data.newBalance)}`, 'success');
+      } else {
+        showAdminToast(data.message || 'Payment reconciled.', 'info');
+      }
+      lookupAdminDeposit(reference);
+      loadAdminDeposits();
+    } else {
+      showAdminToast(data?.message || 'Reconciliation failed.', 'error');
+    }
+  } catch (err) {
+    console.error('reconcileAdminDeposit Error:', err);
+    showAdminToast('Error during reconciliation: ' + err.message, 'error');
+  }
+};
+
 

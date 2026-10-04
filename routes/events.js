@@ -10,13 +10,16 @@ const cloudinary = require('../services/cloudinary');
 
 // Helper to generate a clean, safe URL slug
 function generateSlug(text) {
-  return (text || 'event')
+  const clean = (text || '')
     .toString()
     .toLowerCase()
     .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w\s-]/g, '')
     .replace(/[\s_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  return clean || `event-${Date.now().toString(36)}`;
 }
 
 // ============================================================
@@ -100,10 +103,14 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get event by Slug
+// Get event by Slug (with fallback to ID)
 router.get('/slug/:slug', async (req, res) => {
   try {
-    const event = await db.getEventBySlug(req.params.slug);
+    const rawParam = decodeURIComponent(req.params.slug || '').trim();
+    let event = await db.getEventBySlug(rawParam);
+    if (!event || event.isDeleted) {
+      event = await db.getEventById(rawParam);
+    }
     if (!event || event.isDeleted) {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }
@@ -114,10 +121,14 @@ router.get('/slug/:slug', async (req, res) => {
   }
 });
 
-// Get event by ID
+// Get event by ID (with fallback to Slug)
 router.get('/:id', async (req, res) => {
   try {
-    const event = await db.getEventById(req.params.id);
+    const rawParam = decodeURIComponent(req.params.id || '').trim();
+    let event = await db.getEventById(rawParam);
+    if (!event || event.isDeleted) {
+      event = await db.getEventBySlug(rawParam);
+    }
     if (!event || event.isDeleted) {
       return res.status(404).json({ success: false, message: 'Event not found.' });
     }

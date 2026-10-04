@@ -29,15 +29,7 @@ const State = {
 };
 
 // API Base URL (Relative /api for local development & same-origin production)
-const API_BASE =
-  (window.location.hostname === 'localhost' ||
-   window.location.hostname === '127.0.0.1' ||
-   window.location.hostname === '0.0.0.0' ||
-   window.location.port === '5000' ||
-   window.location.hostname.endsWith('.local') ||
-   window.location.origin.includes('onrender.com'))
-    ? '/api'
-    : 'https://datapay.onrender.com/api';
+const API_BASE = '/api';
 
 
 
@@ -498,7 +490,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (State.token) {
     await initUserSession();
+    checkForReturnedPayment();
   } else {
+    // Preserve any returned payment reference in localStorage so it can be verified upon login
+    const urlParams = new URLSearchParams(window.location.search);
+    const refFromUrl = urlParams.get('reference') || urlParams.get('trxref');
+    if (refFromUrl) {
+      localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+        reference: refFromUrl,
+        returnedAt: Date.now()
+      }));
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
     showAuthScreen('loginCard');
     if (sharedTarget) {
       renderSharedInvitationBanner(sharedTarget);
@@ -712,17 +716,24 @@ function renderRecentTransactions(transactions) {
 
   tbody.innerHTML = transactions.map(tx => {
     let badgeClass = 'badge-success';
-    if (tx.status === 'Pending') badgeClass = 'badge-warning';
-    if (tx.status === 'Failed') badgeClass = 'badge-danger';
+    if (tx.status === 'Processing') badgeClass = 'badge-processing';
+    else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+    else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+    else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
 
     let typeIcon = tx.type === 'deposit' ? '<i class="fa-solid fa-arrow-down" style="color: var(--accent-emerald);"></i> Deposit' : 
                    tx.type === 'airtime' ? '<i class="fa-solid fa-mobile-screen-button" style="color: #38BDF8;"></i> Airtime' : 
                    '<i class="fa-solid fa-wifi" style="color: #8B5CF6;"></i> Data';
 
+    const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
+
     return `
-      <tr>
+      <tr ${isPending ? `style="cursor: pointer;" onclick="checkDepositStatusWithModal('${tx.providerReference || tx.id}', ${tx.amount})" title="Click to verify status"` : ''}>
         <td><strong>${typeIcon}</strong></td>
-        <td>${tx.description || tx.id}</td>
+        <td>
+          <div>${tx.description || tx.id}</div>
+          ${isPending ? `<div style="font-size: 0.75rem; color: var(--accent-blue-light);"><i class="fa-solid fa-rotate-right"></i> Click to verify payment</div>` : ''}
+        </td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: ${tx.type === 'deposit' ? 'var(--accent-emerald)' : '#FFF'};">
           ${tx.type === 'deposit' ? '+' : '-'}${formatNaira(tx.amount)}
         </td>
@@ -841,6 +852,7 @@ function setupEventListeners() {
       localStorage.setItem('strictwallet_token', data.token);
       showToast(data.message, 'success');
       await initUserSession();
+      checkForReturnedPayment();
     } else {
       showToast(data.message || 'Registration failed. Please check your inputs.', 'error');
     }
@@ -867,13 +879,13 @@ function setupEventListeners() {
 
     if (ok && data.success) {
       State.token = data.token;
-      if (rememberMe) {
-        localStorage.setItem('strictwallet_token', data.token);
-      } else {
+      localStorage.setItem('strictwallet_token', data.token);
+      if (!rememberMe) {
         sessionStorage.setItem('strictwallet_token', data.token);
       }
       showToast(data.message, 'success');
       await initUserSession();
+      checkForReturnedPayment();
     } else {
       showToast(data.message || 'Invalid credentials.', 'error');
     }
@@ -1492,23 +1504,37 @@ async function loadAllTransactions() {
   if (ok && data.success && data.transactions.length > 0) {
     tbody.innerHTML = data.transactions.map(tx => {
       let badgeClass = 'badge-success';
-      if (tx.status === 'Pending') badgeClass = 'badge-warning';
-      if (tx.status === 'Failed') badgeClass = 'badge-danger';
+      if (tx.status === 'Processing') badgeClass = 'badge-processing';
+      else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+      else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+      else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+      const ref = tx.providerReference || tx.paystackReference || tx.id;
+      const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
+      const channelDisplay = tx.type === 'deposit'
+        ? (tx.channel ? `<span style="text-transform: capitalize; color: var(--accent-blue-light);"><i class="fa-solid fa-credit-card"></i> ${tx.channel}</span>` : '<span style="color: var(--text-muted);">Paystack</span>')
+        : (tx.phoneNumber ? `<span style="font-family: var(--font-mono);">${tx.phoneNumber}</span>` : '-');
 
       return `
         <tr>
-          <td><code style="color: var(--accent-emerald); font-size: 0.8rem;">${tx.id}</code></td>
+          <td><code style="color: var(--accent-emerald); font-size: 0.8rem;" title="${ref}">${ref}</code></td>
           <td><strong style="text-transform: capitalize;">${tx.type}</strong></td>
-          <td>${tx.phoneNumber || '-'}</td>
+          <td>${channelDisplay}</td>
           <td style="font-family: var(--font-mono); font-weight: 700; color: ${tx.type === 'deposit' ? 'var(--accent-emerald)' : '#FFF'};">
             ${tx.type === 'deposit' ? '+' : '-'}${formatNaira(tx.amount)}
           </td>
           <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(tx.createdAt)}</td>
           <td><span class="badge ${badgeClass}">${tx.status}</span></td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick='showReceiptModal(${JSON.stringify(tx).replace(/'/g, "&apos;")})'>
-              <i class="fa-solid fa-receipt"></i> Receipt
-            </button>
+            ${isPending ? `
+              <button class="btn btn-primary btn-sm" onclick="checkDepositStatusWithModal('${ref}', ${tx.amount})" title="Check status with Paystack">
+                <i class="fa-solid fa-rotate-right"></i> Verify
+              </button>
+            ` : `
+              <button class="btn btn-secondary btn-sm" onclick='showReceiptModal(${JSON.stringify(tx).replace(/'/g, "&apos;")})'>
+                <i class="fa-solid fa-receipt"></i> ${tx.status === 'Successful' ? 'Receipt' : 'Details'}
+              </button>
+            `}
           </td>
         </tr>
       `;
@@ -1522,7 +1548,13 @@ function showReceiptModal(tx) {
   const body = document.getElementById('txReceiptBody');
   if (!body) return;
 
-  let badgeClass = tx.status === 'Successful' ? 'badge-success' : tx.status === 'Pending' ? 'badge-warning' : 'badge-danger';
+  let badgeClass = 'badge-success';
+  if (tx.status === 'Processing') badgeClass = 'badge-processing';
+  else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+  else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+  else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+  const isDeposit = tx.type === 'deposit';
 
   body.innerHTML = `
     <div style="text-align: center; margin-bottom: 20px;">
@@ -1534,16 +1566,21 @@ function showReceiptModal(tx) {
     <div style="background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem;">
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Transaction ID:</span>
-        <code style="color: var(--accent-emerald);">${tx.id}</code>
+        <code style="color: var(--accent-emerald); font-size: 0.82rem;">${tx.id}</code>
       </div>
       <div style="display: flex; justify-content: space-between;">
-        <span style="color: var(--text-muted);">Provider Reference:</span>
-        <span style="color: #FFF; font-family: var(--font-mono);">${tx.providerReference || '-'}</span>
+        <span style="color: var(--text-muted);">Reference:</span>
+        <span style="color: #FFF; font-family: var(--font-mono); font-size: 0.82rem;">${tx.paystackReference || tx.providerReference || tx.id}</span>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Transaction Type:</span>
         <strong style="color: #FFF; text-transform: uppercase;">${tx.type}</strong>
       </div>
+      ${isDeposit && tx.channel ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Payment Channel:</span>
+        <span style="color: #FFF; text-transform: capitalize;">${tx.channel}${tx.cardType ? ` (${tx.cardType})` : ''}${tx.bank ? ` - ${tx.bank}` : ''}</span>
+      </div>` : ''}
       ${tx.network ? `
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Network:</span>
@@ -1558,8 +1595,13 @@ function showReceiptModal(tx) {
         <span style="color: var(--text-muted);">Date & Time:</span>
         <span style="color: #FFF;">${formatDateTime(tx.createdAt)}</span>
       </div>
+      ${tx.fee && tx.fee > 0 ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Processing Fee:</span>
+        <span style="color: var(--text-muted); font-family: var(--font-mono);">${formatNaira(tx.fee)}</span>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 10px; font-size: 1.1rem;">
-        <span style="color: var(--text-muted);">Amount Paid:</span>
+        <span style="color: var(--text-muted);">${isDeposit ? 'Amount Credited:' : 'Amount Paid:'}</span>
         <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(tx.amount)}</strong>
       </div>
     </div>
@@ -1642,7 +1684,473 @@ function logoutUser(showNotification = true) {
   if (showNotification) showToast('You have been signed out safely.', 'info');
 }
 
-// --- PAYSTACK WALLET FUNDING ---
+// ==========================================================================
+// PAYSTACK WALLET FUNDING & RECONCILIATION LIFECYCLE
+// ==========================================================================
+
+let pendingDepositPollTimer = null;
+let currentPendingRef = null;
+let activePaymentSessionId = 0;
+
+function stopActivePaymentPolling() {
+  activePaymentSessionId++;
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+  currentPendingRef = null;
+  localStorage.removeItem('strictwallet_pending_deposit');
+  hideActivePendingBanner();
+}
+
+function showPaymentStatusModal({ status, title, description, amount, reference, allowRetry = false, allowCancel = false }) {
+  const modal = document.getElementById('paymentStatusModal');
+  const spinner = document.getElementById('paymentStatusSpinner');
+  const titleEl = document.getElementById('paymentStatusTitle');
+  const descEl = document.getElementById('paymentStatusDesc');
+  const card = document.getElementById('paymentStatusDetailsCard');
+  const amountEl = document.getElementById('psmAmount');
+  const refEl = document.getElementById('psmReference');
+  const badgeEl = document.getElementById('psmBadge');
+  const retryBtn = document.getElementById('btnPsmRetry');
+  const cancelBtn = document.getElementById('btnPsmCancel');
+
+  if (!modal) return;
+
+  if (titleEl) titleEl.innerText = title;
+  if (descEl) descEl.innerText = description;
+
+  if (card && (amount || reference)) {
+    card.style.display = 'block';
+    if (amountEl && amount) amountEl.innerText = formatNaira(amount);
+    if (refEl && reference) refEl.innerText = reference;
+  } else if (card) {
+    card.style.display = 'none';
+  }
+
+  if (badgeEl && spinner) {
+    badgeEl.className = 'badge';
+    if (status === 'Successful') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: var(--accent-emerald);"></i>`;
+      badgeEl.classList.add('badge-success');
+      badgeEl.innerText = 'Successful';
+    } else if (status === 'Processing') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin" style="font-size: 3.5rem; color: var(--accent-blue);"></i>`;
+      badgeEl.classList.add('badge-processing');
+      badgeEl.innerText = 'Processing';
+    } else if (status === 'Pending') {
+      spinner.innerHTML = `<i class="fa-solid fa-clock-rotate-left fa-spin" style="font-size: 3.5rem; color: var(--status-warning);"></i>`;
+      badgeEl.classList.add('badge-warning');
+      badgeEl.innerText = 'Pending';
+    } else if (status === 'Cancelled') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-xmark" style="font-size: 3.5rem; color: var(--text-muted);"></i>`;
+      badgeEl.classList.add('badge-cancelled');
+      badgeEl.innerText = 'Cancelled';
+    } else { // Failed
+      spinner.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="font-size: 3.5rem; color: var(--status-error);"></i>`;
+      badgeEl.classList.add('badge-danger');
+      badgeEl.innerText = 'Failed';
+    }
+  }
+
+  if (retryBtn) retryBtn.style.display = allowRetry ? 'inline-block' : 'none';
+  if (cancelBtn) cancelBtn.style.display = allowCancel ? 'inline-block' : 'none';
+  modal.style.display = 'flex';
+}
+
+function closePaymentStatusModal() {
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+  const modal = document.getElementById('paymentStatusModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function retryCheckPendingDeposit() {
+  if (currentPendingRef) {
+    checkDepositStatusWithModal(currentPendingRef, null, 1);
+  } else {
+    closePaymentStatusModal();
+  }
+}
+
+async function cancelCurrentPendingDeposit() {
+  if (!currentPendingRef) return;
+  await cancelPendingDeposit(currentPendingRef);
+}
+
+async function cancelPendingDeposit(reference) {
+  if (!reference) return;
+
+  // Immediately clear polling timer to prevent background loop while confirming
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+
+  if (!confirm('Are you sure you want to cancel this pending payment attempt? We will verify with Paystack to make sure no payment was completed before cancelling.')) {
+    // If user decided not to cancel, re-check to resume display
+    checkDepositStatusWithModal(reference);
+    return;
+  }
+
+  // Stop polling and invalidate any in-flight checks
+  stopActivePaymentPolling();
+
+  // Show status modal indicating status check is underway
+  showPaymentStatusModal({
+    status: 'Processing',
+    title: 'Checking Payment Status...',
+    description: 'Safely verifying with Paystack to ensure no funds were deducted before cancelling...',
+    reference: reference,
+    allowRetry: false,
+    allowCancel: false
+  });
+
+  try {
+    const { ok, data } = await authFetch('/wallet/deposit/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reference })
+    });
+
+    // Ensure polling and banners remain stopped
+    stopActivePaymentPolling();
+
+    if (ok && data.success) {
+      if (data.wasSuccessful || data.status === 'Successful') {
+        // Payment actually succeeded before cancellation! Do not cancel!
+        showPaymentStatusModal({
+          status: 'Successful',
+          title: 'Payment Successful',
+          description: data.message || 'Payment was confirmed successful and credited to your wallet.',
+          amount: data.transaction?.amount,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast(data.message || 'Payment confirmed and credited to your wallet!', 'success');
+        await initUserSession();
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+      } else {
+        // Payment was NOT received/confirmed -> successfully cancelled
+        showPaymentStatusModal({
+          status: 'Cancelled',
+          title: 'Payment Attempt Cancelled',
+          description: data.message || 'Payment attempt was cancelled. No funds were debited.',
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast('Payment attempt cancelled. No funds were debited.', 'info');
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+      }
+    } else {
+      showToast(data.message || 'Could not cancel payment session.', 'error');
+      checkActivePendingDepositFromBackend();
+    }
+  } catch (err) {
+    console.error('[Cancel Pending Error]:', err);
+    showToast('Network error while cancelling payment attempt.', 'error');
+    stopActivePaymentPolling();
+  }
+}
+
+function renderActivePendingBanner(tx) {
+  const container = document.getElementById('activePendingDepositBanner');
+  if (!container || !tx) return;
+
+  const status = (tx.status || '').toLowerCase();
+  if (status === 'cancelled' || status === 'successful' || status === 'failed') {
+    hideActivePendingBanner();
+    return;
+  }
+
+  const ref = tx.providerReference || tx.paystackReference || tx.id;
+  const amt = parseFloat(tx.amount || 0);
+
+  container.innerHTML = `
+    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-md); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <i class="fa-solid fa-clock-rotate-left fa-spin" style="font-size: 1.5rem; color: var(--status-warning);"></i>
+        <div>
+          <div style="font-weight: 700; color: #FFF; font-size: 0.95rem;">
+            Deposit Pending Confirmation: <span style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(amt)}</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+            Reference: <code style="color: #FFF; font-size: 0.82rem;">${ref}</code> &bull; Confirming payment from bank. If you transferred, you do not need to pay again.
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" onclick="checkDepositStatusWithModal('${ref}', ${amt})" style="padding: 7px 14px;">
+          <i class="fa-solid fa-rotate-right"></i> Verify Status
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="cancelPendingDeposit('${ref}')" style="padding: 7px 12px; color: #f87171;">
+          Cancel Attempt
+        </button>
+      </div>
+    </div>
+  `;
+  container.style.display = 'block';
+}
+
+function hideActivePendingBanner() {
+  const container = document.getElementById('activePendingDepositBanner');
+  if (container) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+}
+
+async function checkActivePendingDepositFromBackend() {
+  if (!State.token) return;
+  try {
+    const { ok, data } = await authFetch('/wallet/deposit/active-pending');
+    if (ok && data.success) {
+      if (data.reconciled && data.transaction) {
+        stopActivePaymentPolling();
+        showToast(`Deposit of ${formatNaira(data.transaction.amount)} confirmed and credited!`, 'success');
+        await initUserSession();
+        loadAllTransactions();
+      } else if (data.pendingDeposit) {
+        renderActivePendingBanner(data.pendingDeposit);
+        localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+          reference: data.pendingDeposit.providerReference || data.pendingDeposit.id,
+          amount: data.pendingDeposit.amount,
+          initializedAt: new Date(data.pendingDeposit.createdAt).getTime()
+        }));
+      } else {
+        stopActivePaymentPolling();
+      }
+    }
+  } catch (err) {
+    console.warn('[Check Active Pending Error]:', err);
+  }
+}
+
+async function checkDepositStatusWithModal(reference, expectedAmount = null, attempt = 1) {
+  if (!reference) return;
+
+  if (attempt === 1) {
+    activePaymentSessionId++;
+  }
+  const thisSessionId = activePaymentSessionId;
+  currentPendingRef = reference;
+
+  showPaymentStatusModal({
+    status: attempt === 1 ? 'Processing' : 'Pending',
+    title: 'Verifying Payment...',
+    description: 'Please wait while STRICTWALLET safely confirms your transaction with Paystack.',
+    amount: expectedAmount,
+    reference: reference,
+    allowRetry: false,
+    allowCancel: false
+  });
+
+  try {
+    const { ok, data } = await authFetch(`/wallet/deposit/status/${encodeURIComponent(reference)}`);
+
+    // Invalidate if cancelled or session changed during fetch
+    if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) {
+      console.log(`[Payment Status] Status check discarded for ${reference} (session cancelled or changed).`);
+      return;
+    }
+
+    if (ok && data.success) {
+      const status = data.status;
+      const amt = data.amount || expectedAmount;
+
+      if (status === 'Successful') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Successful',
+          title: 'Payment Successful',
+          description: `₦${parseFloat(amt).toLocaleString('en-NG', { minimumFractionDigits: 2 })} credited to your wallet`,
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast(`₦${parseFloat(amt).toLocaleString()} deposited successfully!`, 'success');
+        await initUserSession();
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Cancelled') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Cancelled',
+          title: 'Payment Attempt Cancelled',
+          description: data.message || 'This payment attempt was cancelled. No funds were debited.',
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Failed') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Failed',
+          title: 'Payment Failed',
+          description: data.message || 'Payment could not be completed by your bank at this time.',
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Processing') {
+        renderActivePendingBanner({ amount: amt, id: reference, providerReference: reference, status: 'Processing' });
+        if (attempt < 6) {
+          pendingDepositPollTimer = setTimeout(() => {
+            if (thisSessionId === activePaymentSessionId && currentPendingRef === reference) {
+              checkDepositStatusWithModal(reference, amt, attempt + 1);
+            }
+          }, 3500);
+          return;
+        } else {
+          showPaymentStatusModal({
+            status: 'Processing',
+            title: 'Payment Processing',
+            description: 'Your payment was received and is currently being confirmed by the banking network. Your wallet will be credited automatically once confirmed. You do not need to pay again.',
+            amount: amt,
+            reference: reference,
+            allowRetry: true,
+            allowCancel: true
+          });
+          return;
+        }
+      }
+
+      if (status === 'Pending') {
+        renderActivePendingBanner({ amount: amt, id: reference, providerReference: reference, status: 'Pending' });
+        if (attempt < 5) {
+          pendingDepositPollTimer = setTimeout(() => {
+            if (thisSessionId === activePaymentSessionId && currentPendingRef === reference) {
+              checkDepositStatusWithModal(reference, amt, attempt + 1);
+            }
+          }, 4000);
+          return;
+        } else {
+          showPaymentStatusModal({
+            status: 'Pending',
+            title: 'Payment Pending',
+            description: 'If you completed the bank transfer or USSD payment, please allow a moment for bank network settlement. You do not need to pay again.',
+            amount: amt,
+            reference: reference,
+            allowRetry: true,
+            allowCancel: true
+          });
+          return;
+        }
+      }
+    } else {
+      if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) return;
+      showPaymentStatusModal({
+        status: 'Pending',
+        title: 'Payment Pending',
+        description: 'Unable to reach the payment verification server. You can check again or cancel the attempt.',
+        amount: expectedAmount,
+        reference: reference,
+        allowRetry: true,
+        allowCancel: true
+      });
+    }
+  } catch (err) {
+    if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) return;
+    console.warn('[Payment Check Error]:', err);
+    showPaymentStatusModal({
+      status: 'Pending',
+      title: 'Payment Pending',
+      description: 'Temporary network connection issue. Your payment will be reconciled automatically once connection stabilizes.',
+      amount: expectedAmount,
+      reference: reference,
+      allowRetry: true,
+      allowCancel: true
+    });
+  }
+}
+
+function checkForReturnedPayment() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const refFromUrl = urlParams.get('reference') || urlParams.get('trxref');
+  const flow = urlParams.get('flow');
+
+  if (refFromUrl) {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+      reference: refFromUrl,
+      returnedAt: Date.now()
+    }));
+
+    checkDepositStatusWithModal(refFromUrl);
+    return;
+  }
+
+  // Also clear any dangling flow parameter if user returned without ref
+  if (flow === 'deposit_return') {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
+  const storedPending = localStorage.getItem('strictwallet_pending_deposit');
+  if (storedPending) {
+    try {
+      const parsed = JSON.parse(storedPending);
+      const timeElapsed = Date.now() - (parsed.initializedAt || parsed.returnedAt || 0);
+      if (parsed.reference && timeElapsed < 24 * 60 * 60 * 1000) {
+        checkDepositStatusWithModal(parsed.reference, parsed.amount);
+      } else {
+        localStorage.removeItem('strictwallet_pending_deposit');
+      }
+    } catch (_) {
+      localStorage.removeItem('strictwallet_pending_deposit');
+    }
+  }
+
+  // Always check backend for active pending deposit
+  checkActivePendingDepositFromBackend();
+}
+
+function checkPendingDepositOnResume() {
+  const storedPending = localStorage.getItem('strictwallet_pending_deposit');
+  if (storedPending) {
+    try {
+      const parsed = JSON.parse(storedPending);
+      if (parsed.reference) {
+        checkDepositStatusWithModal(parsed.reference, parsed.amount);
+      }
+    } catch (_) {}
+  }
+
+  checkActivePendingDepositFromBackend();
+}
+
+// Lifecycle listeners for user returning from other apps / tabs
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && State && State.token) {
+    checkPendingDepositOnResume();
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (State && State.token) {
+    checkPendingDepositOnResume();
+  }
+});
+
+// --- PAYSTACK WALLET FUNDING SUBMISSION ---
 document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const amountInput = document.getElementById('depositAmount').value;
@@ -1656,17 +2164,33 @@ document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) 
   const btn = document.getElementById('btnProcessPayment');
   const originalText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Initializing...`;
 
   try {
+    const returnUrl = window.location.origin + window.location.pathname + '?flow=deposit_return';
     const { ok, data } = await authFetch('/wallet/deposit/initialize', {
       method: 'POST',
-      body: JSON.stringify({ amount })
+      body: JSON.stringify({ amount, callbackUrl: returnUrl })
     });
 
     if (!ok || !data.success) {
       throw new Error(data.message || 'Failed to initialize payment');
     }
+
+    // Persist pending deposit in localStorage immediately
+    localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+      reference: data.reference,
+      amount: amount,
+      initializedAt: Date.now()
+    }));
+
+    // Render active pending banner immediately
+    renderActivePendingBanner({
+      id: data.reference,
+      providerReference: data.reference,
+      amount: amount,
+      status: 'Pending'
+    });
 
     closeModal('fundWalletModal');
     document.getElementById('fundWalletForm').reset();
@@ -1674,32 +2198,15 @@ document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) 
     const handler = PaystackPop.setup({
       key: data.publicKey,
       email: State.user.email,
-      amount: amount * 100, // kobo
+      amount: Math.round(amount * 100), // kobo
       reference: data.reference,
       currency: 'NGN',
       callback: function(response) {
-        showToast('Payment successful, verifying...', 'info');
-        // Handle async logic inside the regular function
-        (async () => {
-          try {
-            const verifyRes = await authFetch('/wallet/deposit/verify', {
-              method: 'POST',
-              body: JSON.stringify({ reference: response.reference })
-            });
-            
-            if (verifyRes.ok && verifyRes.data.success) {
-              showToast(`Successfully deposited ₦${amount.toLocaleString()}`, 'success');
-              await initUserSession(); // Refresh wallet overview
-            } else {
-              showToast(verifyRes.data?.message || 'Verification failed. Please contact support.', 'error');
-            }
-          } catch (err) {
-            showToast('An error occurred during verification.', 'error');
-          }
-        })();
+        checkDepositStatusWithModal(response.reference || data.reference, amount);
       },
       onClose: function() {
-        showToast('Payment window closed', 'info');
+        // When popup closes, check if payment actually completed (e.g. transfer completed externally)
+        checkDepositStatusWithModal(data.reference, amount);
       }
     });
 

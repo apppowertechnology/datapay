@@ -1,0 +1,32 @@
+# STRICTWALLET Robots Configuration
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /about.html
+Allow: /services
+Allow: /services.html
+Allow: /how-it-works
+Allow: /how-it-works.html
+Allow: /event-ticketing
+Allow: /event-ticketing.html
+Allow: /data-airtime
+Allow: /data-airtime.html
+Allow: /pricing
+Allow: /pricing.html
+Allow: /contact
+Allow: /contact.html
+Allow: /terms
+Allow: /terms.html
+Allow: /privacy
+Allow: /privacy.html
+Allow: /events/
+Allow: /event/
+
+# Disallow private and administrative portals
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /api/
+Disallow: /wallet/
+Disallow: /dashboard
+
+Sitemap: https://strictwallet.com.ng/sitemap.xml

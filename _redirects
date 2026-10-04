@@ -1,0 +1,25 @@
+# STRICTWALLET Routing Configuration
+# Clean URLs for Public Pages and Admin
+/admin             /admin.html             200
+/about             /about.html             200
+/services          /services.html          200
+/event-ticketing   /event-ticketing.html   200
+/data-airtime      /data-airtime.html      200
+/pricing           /pricing.html           200
+/how-it-works      /how-it-works.html      200
+/terms             /terms.html             200
+/privacy           /privacy.html           200
+/contact           /contact.html           200
+
+# Dynamic Event and Ticket Deep-Link SPA Rewrites
+/events/*          /index.html             200
+/events            /index.html             200
+/event/*           /index.html             200
+/event             /index.html             200
+/tickets/*         /index.html             200
+/tickets           /index.html             200
+/ticket/*          /index.html             200
+/ticket            /index.html             200
+
+# Catch-all SPA Fallback for all client-side routes
+/*                 /index.html             200

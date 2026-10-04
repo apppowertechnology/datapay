@@ -94,6 +94,10 @@
           <i class="fa-solid fa-receipt"></i>
           <span>Transaction Ledger</span>
         </div>
+        <div class="nav-item" data-admin-view="viewAdminDeposits">
+          <i class="fa-solid fa-money-bill-transfer"></i>
+          <span>Payments & Deposits</span>
+        </div>
         <div class="nav-item" data-admin-view="viewAdminEvents">
           <i class="fa-solid fa-calendar-days"></i>
           <span>Events & Creator Payouts</span>
@@ -345,6 +349,79 @@
                 </thead>
                 <tbody id="adminTransactionsTableBody">
                   <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 3B. PAYMENTS & DEPOSITS MANAGEMENT ================= -->
+        <section id="viewAdminDeposits" class="view-section">
+          <!-- Search & Live Verification Tool Card -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title"><i class="fa-solid fa-magnifying-glass-dollar" style="color: var(--accent-blue);"></i> Payment Lookup & Live Verification Tool</h2>
+                <p class="card-subtitle">Search payments by Transaction Reference, Paystack Reference, User Email, Phone, or User ID. Instantly check live Paystack status.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+              <input type="text" id="adminDepositLookupInput" placeholder="Enter Reference (e.g. STW-...), Email, or Phone..." style="flex: 1; min-width: 280px; padding: 10px 14px;">
+              <button class="btn btn-primary" id="btnAdminDepositLookup">
+                <i class="fa-solid fa-magnifying-glass"></i> Search & Live Verify
+              </button>
+              <button class="btn btn-secondary" id="btnAdminDepositLookupClear">
+                Clear
+              </button>
+            </div>
+
+            <!-- Lookup Results Container -->
+            <div id="adminDepositLookupResult" style="display: none; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px;">
+              <!-- Injected by admin.js -->
+            </div>
+          </div>
+
+          <!-- Master Deposits Table Card -->
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title"><i class="fa-solid fa-money-bill-transfer" style="color: var(--accent-emerald);"></i> Paystack Deposits Ledger</h2>
+                <p class="card-subtitle">Live log of customer wallet funding attempts, reconciliation states, and audit trails</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="adminDepositTableSearch" placeholder="Search Ref, Email, User..." style="width: 240px; padding: 8px 14px;">
+                <select id="adminDepositTableStatus" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Statuses</option>
+                  <option value="Successful">Successful</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Failed">Failed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" id="btnRefreshAdminDeposits">
+                  <i class="fa-solid fa-rotate-right"></i> Refresh
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>User</th>
+                    <th>Amount</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Credited</th>
+                    <th>Date & Time</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminDepositsTableBody">
+                  <!-- Injected by admin.js -->
                 </tbody>
               </table>
             </div>

@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { purchaseAirtime, purchaseData } = require('../services/maskawasub');
 const paystackService = require('../services/paystack');
+const { reconcileDepositTransaction } = require('../services/paymentReconciliation');
 const { authenticateToken } = require('../middleware/auth');
 
 // Network mapping
@@ -376,15 +377,65 @@ router.get('/transactions', authenticateToken, async (req, res) => {
 // 7. INITIALIZE PAYSTACK DEPOSIT
 router.post('/deposit/initialize', authenticateToken, async (req, res) => {
   try {
-    const { amount } = req.body;
-    if (!amount || amount < 100) {
+    const { amount, callbackUrl } = req.body;
+    const depositAmount = parseFloat(amount);
+    if (!depositAmount || depositAmount < 100) {
       return res.status(400).json({ success: false, message: 'Minimum deposit is ₦100.' });
     }
 
     const user = await db.getUserById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-    const paystackData = await paystackService.initializeTransaction(amount, user.email);
+    // Determine return callback URL if not provided by client
+    const origin = req.headers.origin || (req.headers.referer ? new URL(req.headers.referer).origin : null);
+    const resolvedCallbackUrl = callbackUrl || (origin ? `${origin}/?flow=deposit_return` : null);
+
+    const metadata = {
+      userId: user.id,
+      userEmail: user.email,
+      userFullName: user.fullName || '',
+      depositAmount
+    };
+
+    const paystackData = await paystackService.initializeTransaction(
+      depositAmount,
+      user.email,
+      metadata,
+      resolvedCallbackUrl
+    );
+
+    // IMMEDIATELY persist pending transaction so state is preserved across reloads & app switching
+    const tx = {
+      id: paystackData.reference,
+      userId: user.id,
+      userFullName: user.fullName || 'StrictWallet User',
+      userEmail: user.email,
+      type: 'deposit',
+      amount: depositAmount,
+      chargedAmount: depositAmount,
+      fee: 0,
+      providerReference: paystackData.reference,
+      paystackReference: paystackData.reference,
+      status: 'Pending',
+      credited: false,
+      description: `Paystack Deposit (₦${depositAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })})`,
+      balanceBefore: user.walletBalance || 0,
+      createdAt: new Date().toISOString()
+    };
+    await db.createTransaction(tx);
+
+    await db.saveDeposit({
+      id: `DEP-${paystackData.reference}`,
+      reference: paystackData.reference,
+      providerReference: paystackData.reference,
+      paystackReference: paystackData.reference,
+      userId: user.id,
+      userEmail: user.email,
+      amount: depositAmount,
+      status: 'Pending',
+      credited: false,
+      createdAt: new Date().toISOString()
+    });
 
     return res.json({
       success: true,
@@ -406,45 +457,231 @@ router.post('/deposit/verify', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Transaction reference is required.' });
     }
 
-    const verification = await paystackService.verifyTransaction(reference);
+    const result = await reconcileDepositTransaction({
+      reference,
+      triggeredBy: `user_verify_${req.user.id}`
+    });
 
-    if (verification.status === 'success') {
-      const user = await db.getUserById(req.user.id);
-      
-      // Ensure we haven't processed this transaction already
-      const existingTx = await db.getTransactionById(reference);
-      if (existingTx) {
-         return res.json({ success: true, message: 'Transaction already processed.', newBalance: user.walletBalance });
-      }
+    const user = await db.getUserById(req.user.id);
 
-      // Update balances
-      const amount = parseFloat(verification.amount);
-      user.walletBalance = (parseFloat(user.walletBalance || 0) + amount);
-      user.totalDeposited = (parseFloat(user.totalDeposited || 0) + amount);
-      
-      await db.saveUser(user);
-
-      // Record transaction
-      const tx = {
-        id: reference,
-        userId: user.id,
-        type: 'deposit',
-        amount: amount,
-        description: `Paystack Deposit (₦${amount.toLocaleString('en-NG', { minimumFractionDigits: 2 })})`,
-        status: 'Successful',
-        balanceAfter: user.walletBalance,
-        createdAt: new Date().toISOString()
-      };
-      await db.createTransaction(tx);
-
-      return res.json({ success: true, message: 'Deposit successful.', newBalance: user.walletBalance });
-    } else {
-      return res.status(400).json({ success: false, message: 'Payment verification failed or pending.' });
-    }
-
+    return res.json({
+      success: result.success,
+      status: result.status,
+      credited: result.credited || result.alreadyCredited || false,
+      message: result.message || (result.status === 'Successful' ? 'Deposit successful.' : `Payment status: ${result.status}`),
+      newBalance: user ? user.walletBalance : undefined,
+      transaction: result.transaction
+    });
   } catch (error) {
     console.error('[Deposit Verify Error]:', error);
     return res.status(500).json({ success: false, message: 'Error verifying deposit.' });
+  }
+});
+
+// 9. CHECK DEPOSIT STATUS (For polling, state recovery and returns)
+router.get('/deposit/status/:reference', authenticateToken, async (req, res) => {
+  try {
+    const { reference } = req.params;
+    if (!reference) {
+      return res.status(400).json({ success: false, message: 'Reference is required.' });
+    }
+
+    let tx = await db.getTransactionByReference(reference);
+
+    // If transaction belongs to another user, forbid access
+    if (tx && tx.userId && tx.userId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Unauthorized access to transaction.' });
+    }
+
+    // If transaction is still Pending or Processing, attempt a live reconciliation
+    if (!tx || tx.status === 'Pending' || tx.status === 'Processing') {
+      const rec = await reconcileDepositTransaction({
+        reference,
+        triggeredBy: `user_status_poll_${req.user.id}`
+      });
+      if (rec.transaction) {
+        tx = rec.transaction;
+      }
+    }
+
+    if (!tx) {
+      return res.status(404).json({ success: false, message: 'Deposit transaction not found.' });
+    }
+
+    const user = await db.getUserById(req.user.id);
+
+    return res.json({
+      success: true,
+      status: tx.status,
+      credited: tx.credited || false,
+      amount: tx.amount,
+      channel: tx.channel || null,
+      createdAt: tx.createdAt,
+      reference: tx.providerReference || tx.reference || tx.id,
+      newBalance: user ? user.walletBalance : undefined,
+      transaction: tx
+    });
+  } catch (error) {
+    console.error('[Deposit Status Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve deposit status.' });
+  }
+});
+
+// 10. GET ACTIVE PENDING DEPOSIT (For restoring state when user reloads or returns)
+router.get('/deposit/active-pending', authenticateToken, async (req, res) => {
+  try {
+    const userTxs = await db.getUserTransactions(req.user.id);
+    const now = Date.now();
+
+    // Look for pending or processing deposit in the last 24 hours
+    const pendingTx = userTxs.find(tx => {
+      if (!tx || tx.type !== 'deposit') return false;
+      const s = (tx.status || '').toLowerCase();
+      if (tx.credited === true || s === 'successful' || s === 'failed' || s === 'cancelled') return false;
+      const createdTime = new Date(tx.createdAt || 0).getTime();
+      return (now - createdTime) <= 86400 * 1000;
+    });
+
+    if (!pendingTx) {
+      return res.json({ success: true, pendingDeposit: null });
+    }
+
+    // Attempt live reconciliation in background
+    const ref = pendingTx.providerReference || pendingTx.paystackReference || pendingTx.id;
+    let latestTx = pendingTx;
+    try {
+      const rec = await reconcileDepositTransaction({
+        reference: ref,
+        triggeredBy: `user_active_pending_check_${req.user.id}`
+      });
+      if (rec.transaction) {
+        latestTx = rec.transaction;
+      }
+    } catch (_) {}
+
+    return res.json({
+      success: true,
+      pendingDeposit: (latestTx.status === 'Pending' || latestTx.status === 'Processing') ? latestTx : null,
+      reconciled: latestTx.status === 'Successful',
+      transaction: latestTx
+    });
+  } catch (error) {
+    console.error('[Active Pending Deposit Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve pending deposit.' });
+  }
+});
+
+// 11. CANCEL PENDING DEPOSIT (Checks actual Paystack status first; if unpaid, marks Cancelled; if successful, credits wallet safely)
+router.post('/deposit/cancel', authenticateToken, async (req, res) => {
+  try {
+    const { reference } = req.body;
+    if (!reference) {
+      return res.status(400).json({ success: false, message: 'Transaction reference is required.' });
+    }
+
+    let tx = await db.getTransactionByReference(reference);
+    const depRecord = await db.getDepositByReference(reference);
+
+    const txUserId = (tx && tx.userId) || (depRecord && depRecord.userId);
+    if (!txUserId || (txUserId !== req.user.id && req.user.role !== 'admin')) {
+      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+    }
+
+    const currentStatus = ((tx && tx.status) || (depRecord && depRecord.status) || '').toLowerCase();
+    const isCredited = (tx && tx.credited === true) || (depRecord && depRecord.credited === true);
+
+    // 1. If transaction is already credited or successful in DB, reject cancellation and return current state
+    if (isCredited || currentStatus === 'successful') {
+      const user = await db.getUserById(req.user.id);
+      return res.json({
+        success: true,
+        wasSuccessful: true,
+        credited: true,
+        status: 'Successful',
+        message: 'Payment was already confirmed and credited to your wallet.',
+        transaction: tx,
+        newBalance: user ? user.walletBalance : undefined
+      });
+    }
+
+    // 2. Authoritative check with Paystack before cancelling
+    let verification = null;
+    try {
+      verification = await paystackService.verifyTransaction(reference);
+    } catch (err) {
+      console.warn(`[Deposit Cancel Verify Warning for ${reference}]: ${err.message}`);
+    }
+
+    const paystackStatus = verification ? (verification.status || '').toLowerCase() : '';
+
+    // 3. If payment was ACTUALLY successful at Paystack, DO NOT CANCEL IT! Reconcile and credit wallet once.
+    if (paystackStatus === 'success') {
+      const rec = await reconcileDepositTransaction({
+        reference,
+        paystackData: verification,
+        triggeredBy: `user_cancel_verify_${req.user.id}`
+      });
+
+      const user = await db.getUserById(req.user.id);
+      return res.json({
+        success: true,
+        wasSuccessful: true,
+        credited: true,
+        status: 'Successful',
+        message: `Payment was confirmed successful at Paystack! ₦${parseFloat(rec.transaction?.amount || (tx && tx.amount) || (depRecord && depRecord.amount) || 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })} has been credited to your wallet.`,
+        transaction: rec.transaction || tx,
+        newBalance: user ? user.walletBalance : undefined
+      });
+    }
+
+    // 4. Re-check database state before cancelling in case an asynchronous webhook or background check reconciled it during Paystack verify round-trip
+    const freshTx = await db.getTransactionByReference(reference);
+    const freshDep = await db.getDepositByReference(reference);
+    const freshStatus = ((freshTx && freshTx.status) || (freshDep && freshDep.status) || '').toLowerCase();
+    const freshCredited = (freshTx && freshTx.credited === true) || (freshDep && freshDep.credited === true);
+
+    if (freshCredited || freshStatus === 'successful') {
+      const user = await db.getUserById(req.user.id);
+      return res.json({
+        success: true,
+        wasSuccessful: true,
+        credited: true,
+        status: 'Successful',
+        message: 'Payment was confirmed and credited to your wallet.',
+        transaction: freshTx || tx,
+        newBalance: user ? user.walletBalance : undefined
+      });
+    }
+
+    // 5. Payment has NOT been received or confirmed as successful -> Mark as Cancelled
+    let updatedTx = freshTx || tx;
+    if (updatedTx && !updatedTx.credited) {
+      updatedTx = await db.updateTransaction(updatedTx.id, {
+        status: 'Cancelled',
+        gatewayResponse: verification?.gatewayResponse || 'Cancelled by customer',
+        cancelledAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    if (freshDep && !freshDep.credited) {
+      await db.updateDeposit(freshDep.id, {
+        status: 'Cancelled',
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    return res.json({
+      success: true,
+      wasSuccessful: false,
+      credited: false,
+      status: 'Cancelled',
+      message: 'Payment attempt was cancelled. No funds were debited.',
+      transaction: updatedTx
+    });
+  } catch (error) {
+    console.error('[Cancel Deposit Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to cancel deposit.' });
   }
 });
 

@@ -10,7 +10,11 @@ const PORT = process.env.PORT || 5000;
 
 // Security & Parsing Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static frontend files directly from project root
@@ -59,6 +63,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/wallet', require('./routes/wallet'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/webhook', require('./routes/webhook'));
+app.use('/webhook', require('./routes/webhook')); // Allow webhooks at /webhook or /api/webhook
 app.use('/api/support', require('./routes/support'));
 app.use('/api/admin', require('./routes/admin'));
 
@@ -157,6 +162,14 @@ async function startServer() {
       if (needsUpdate) {
         await db.saveUser(existingAdmin);
       }
+    }
+
+    // Start background payment reconciliation engine
+    try {
+      const { startPaymentReconciliationWorker } = require('./services/paymentReconciliation');
+      startPaymentReconciliationWorker();
+    } catch (workerErr) {
+      console.error('[Payment Reconciliation Worker] Failed to start:', workerErr.message);
     }
   } catch (err) {
     console.error(`[Server Startup] Firebase initialization FAILED: ${err.message}`);
