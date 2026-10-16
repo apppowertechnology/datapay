@@ -1,0 +1,45 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://datapay.onrender.com/api/:path*"
+    },
+    {
+      "source": "/events",
+      "destination": "/index"
+    },
+    {
+      "source": "/events/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/event",
+      "destination": "/index"
+    },
+    {
+      "source": "/event/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/tickets",
+      "destination": "/index"
+    },
+    {
+      "source": "/tickets/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/ticket",
+      "destination": "/index"
+    },
+    {
+      "source": "/ticket/:path*",
+      "destination": "/index"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index"
+    }
+  ]
+}
