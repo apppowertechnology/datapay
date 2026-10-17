@@ -224,6 +224,23 @@ async function reconcileDepositTransaction({ reference, paystackData = null, tri
 
       console.log(`[PaymentReconciliation] Successfully credited ₦${depositAmount} to user ${user.id} (${user.email}) for ref ${reference} via ${triggeredBy}`);
 
+      // Trigger Transactional SMS Credit Alert asynchronously
+      try {
+        const { sendTransactionalAlert } = require('./smsAlertService');
+        sendTransactionalAlert({
+          userId: user.id,
+          alertType: 'credit',
+          amount: depositAmount,
+          userBalance: user.walletBalance,
+          balanceType: 'main',
+          desc: `Credited ₦${depositAmount}`,
+          reference: reference,
+          transactionType: 'deposit'
+        }).catch(err => console.error('[Paystack SMS Alert Error]:', err.message));
+      } catch (smsErr) {
+        console.warn('[PaymentReconciliation] SMS alert error:', smsErr.message);
+      }
+
       return {
         success: true,
         status: 'Successful',
@@ -377,8 +394,351 @@ function stopPaymentReconciliationWorker() {
   }
 }
 
+/**
+ * Authoritative, idempotent reconciliation function for Strowallet Sterling Bank virtual account transfers.
+ * Strictly charges ₦25 per successfully verified incoming transfer.
+ *
+ * @param {object} payload - Incoming Strowallet webhook payload
+ * @returns {Promise<{
+ *   success: boolean,
+ *   status: string,
+ *   credited?: boolean,
+ *   alreadyCredited?: boolean,
+ *   newBalance?: number,
+ *   transaction?: object,
+ *   message?: string
+ * }>}
+ */
+/**
+ * Authoritative, idempotent reconciliation function for Strowallet Sterling Bank virtual account transfers.
+ * Strictly charges ₦25 per successfully verified incoming transfer.
+ *
+ * @param {object} payload - Incoming Strowallet webhook payload
+ * @param {object} [options] - Reconciliation options (e.g. { skipVerification: boolean })
+ * @returns {Promise<{
+ *   success: boolean,
+ *   status: string,
+ *   credited?: boolean,
+ *   alreadyCredited?: boolean,
+ *   newBalance?: number,
+ *   transaction?: object,
+ *   message?: string,
+ *   unconfirmed?: boolean,
+ *   timeout?: boolean
+ * }>}
+ */
+async function reconcileStrowalletTransfer(payload, options = {}) {
+  if (!payload) {
+    return { success: false, status: 'Failed', message: 'No payload provided' };
+  }
+
+  // Support unwrapping if nested inside data or response
+  const data = (payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object')
+    ? payload.data
+    : (payload && typeof payload === 'object' && payload.response && typeof payload.response === 'object')
+      ? payload.response
+      : (payload || {});
+
+  const sessionId = String(
+    data.sessionId || data.session_id || data.sessionID || data.reference ||
+    payload.sessionId || payload.session_id || payload.sessionID || payload.reference || ''
+  ).trim();
+
+  const accountNumber = String(
+    data.accountNumber || data.account_number || data.account ||
+    payload.accountNumber || payload.account_number || payload.account || ''
+  ).trim();
+
+  const rawTransactionAmount = data.transactionAmount ?? data.transaction_amount ?? data.amount ??
+    payload.transactionAmount ?? payload.transaction_amount ?? payload.amount;
+
+  const rawSettledAmount = data.settledAmount ?? data.settled_amount ??
+    payload.settledAmount ?? payload.settled_amount;
+
+  const rawFeeAmount = data.feeAmount ?? data.fee_amount ??
+    payload.feeAmount ?? payload.fee_amount;
+
+  const rawVatAmount = data.vatAmount ?? data.vat_amount ??
+    payload.vatAmount ?? payload.vat_amount;
+
+  const currency = String(data.currency || payload.currency || 'NGN').trim().toUpperCase();
+
+  const initiationTranRef = (data.initiationTranRef && data.initiationTranRef !== 'null')
+    ? String(data.initiationTranRef).trim()
+    : (payload.initiationTranRef && payload.initiationTranRef !== 'null' ? String(payload.initiationTranRef).trim() : null);
+
+  const settlementId = (data.settlementId && data.settlementId !== 'null')
+    ? String(data.settlementId).trim()
+    : (payload.settlementId && payload.settlementId !== 'null' ? String(payload.settlementId).trim() : null);
+
+  if (!sessionId) {
+    return { success: false, status: 'Failed', message: 'Missing sessionId in transfer notification' };
+  }
+  if (!accountNumber) {
+    return { success: false, status: 'Failed', message: 'Missing accountNumber in transfer notification' };
+  }
+
+  return withLock(sessionId, async () => {
+    // 1. Idempotency Check: verify if already credited by sessionId, initiationTranRef, or settlementId
+    let tx = await db.getTransactionByReference(sessionId);
+    if (!tx && initiationTranRef) {
+      tx = await db.getTransactionByReference(initiationTranRef);
+    }
+    if (!tx && settlementId) {
+      tx = await db.getTransactionByReference(settlementId);
+    }
+
+    if (tx && (tx.status === 'Successful' || tx.credited === true)) {
+      console.log(`[PaymentReconciliation] Strowallet transfer ${sessionId} already processed and credited.`);
+      return {
+        success: true,
+        alreadyCredited: true,
+        status: 'Successful',
+        transaction: tx,
+        message: 'Transfer has already been processed.'
+      };
+    }
+
+    // 2. Validate Currency: STRICTWALLET wallet operates strictly in NGN
+    if (currency !== 'NGN') {
+      console.warn(`[PaymentReconciliation] Rejected non-NGN transfer currency (${currency}) for session: ${sessionId}`);
+      return {
+        success: false,
+        status: 'Failed',
+        message: `Unsupported transfer currency: ${currency}. Only NGN transfers are supported.`
+      };
+    }
+
+    // 3. Identify the matching STRICTWALLET user by virtual account number
+    let user = await db.getUserByVirtualAccount(accountNumber);
+    if (!user && (data.email || payload.email)) {
+      user = await db.getUserByEmail(data.email || payload.email);
+    }
+    if (!user && (data.phone || payload.phone)) {
+      user = await db.getUserByPhone(data.phone || payload.phone);
+    }
+
+    if (!user) {
+      const maskedAcc = accountNumber.length > 4 ? `****${accountNumber.slice(-4)}` : '****';
+      console.error(`[PaymentReconciliation] No user found for virtual account: ${maskedAcc} (session: ${sessionId})`);
+      return {
+        success: false,
+        status: 'Failed',
+        message: `No matching user found for virtual account number ${accountNumber}`
+      };
+    }
+
+    // 4. Validate Amount
+    // The gross amount transferred by the payer
+    const incomingGross = parseFloat(rawTransactionAmount ?? rawSettledAmount);
+    if (isNaN(incomingGross) || incomingGross <= 0) {
+      console.error(`[PaymentReconciliation] Invalid gross transfer amount: ${rawTransactionAmount} for session: ${sessionId}`);
+      return {
+        success: false,
+        status: 'Failed',
+        message: 'Invalid transfer amount'
+      };
+    }
+
+    // 5. Authoritative Session Verification via Strowallet Verify SessionID API
+    // Endpoint: GET https://strowallet.com/api/verifysessionid/?public_key=...&amount=...&sessionID=...
+    if (!options.skipVerification) {
+      const { verifySessionId } = require('./strowallet');
+      const verifyRes = await verifySessionId(sessionId, incomingGross);
+
+      if (!verifyRes.success) {
+        if (verifyRes.timeout) {
+          console.warn(`[PaymentReconciliation] Provider verification timed out for session ${sessionId}.`);
+          return {
+            success: false,
+            timeout: true,
+            status: 'Timeout',
+            message: 'Strowallet session verification timed out. Notification will be retried.'
+          };
+        }
+
+        console.warn(`[PaymentReconciliation] Session verification failed at provider for session ${sessionId}: ${verifyRes.message}`);
+        return {
+          success: false,
+          status: 'Failed',
+          unconfirmed: true,
+          message: `Strowallet session verification failed: ${verifyRes.message}`
+        };
+      }
+    }
+
+    const STRICTWALLET_TRANSFER_FEE = 25.00;
+
+    const availableAmount = (rawSettledAmount && !isNaN(parseFloat(rawSettledAmount)) && parseFloat(rawSettledAmount) > 0)
+      ? parseFloat(rawSettledAmount)
+      : incomingGross;
+
+    // Safe transaction policy: If gross amount is <= fixed ₦25 fee, do not create negative/zero wallet credit
+    if (incomingGross <= STRICTWALLET_TRANSFER_FEE) {
+      console.warn(`[PaymentReconciliation] Incoming transfer ₦${incomingGross} is <= fixed charge ₦${STRICTWALLET_TRANSFER_FEE}. Creating audit record without wallet credit.`);
+
+      const failedTx = {
+        id: sessionId,
+        userId: user.id,
+        userFullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'STRICTWALLET User',
+        userEmail: user.email,
+        type: 'deposit',
+        channel: 'virtual_account',
+        bank: 'Sterling Bank',
+        virtualAccountNumber: accountNumber,
+        amount: 0,
+        grossAmount: incomingGross,
+        availableAmount: availableAmount,
+        chargedAmount: incomingGross,
+        fee: STRICTWALLET_TRANSFER_FEE,
+        providerFee: parseFloat(rawFeeAmount || 0),
+        vatAmount: parseFloat(rawVatAmount || 0),
+        currency: currency,
+        providerReference: sessionId,
+        sessionId: sessionId,
+        initiationTranRef: initiationTranRef,
+        settlementId: settlementId,
+        status: 'Failed',
+        credited: false,
+        description: `Sterling Bank Virtual Account Transfer (Gross: ₦${incomingGross.toFixed(2)} is <= ₦25.00 fixed charge. Wallet not credited.)`,
+        createdAt: data.tranDateTime || payload.tranDateTime || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await db.createTransaction(failedTx);
+
+      return {
+        success: false,
+        status: 'Failed',
+        message: `Incoming transfer amount of ₦${incomingGross.toFixed(2)} is less than or equal to the ₦25.00 processing charge.`
+      };
+    }
+
+    // Net credit after exactly ₦25 STRICTWALLET charge
+    const netCredit = Math.round((incomingGross - STRICTWALLET_TRANSFER_FEE) * 100) / 100;
+
+    // Re-check inside lock right before crediting wallet
+    tx = await db.getTransactionByReference(sessionId);
+    if (tx && (tx.status === 'Successful' || tx.credited === true)) {
+      return {
+        success: true,
+        alreadyCredited: true,
+        status: 'Successful',
+        transaction: tx,
+        message: 'Transfer has already been credited.'
+      };
+    }
+
+    // 6. Authoritative Atomic Balance Increment with Firebase Realtime Database
+    let creditedUser = user;
+    let balanceBefore = parseFloat(user.walletBalance || 0);
+    let balanceAfter = balanceBefore + netCredit;
+
+    if (typeof db.atomicCreditUserWallet === 'function') {
+      const creditRes = await db.atomicCreditUserWallet(user.id, netCredit);
+      creditedUser = creditRes.user;
+      balanceBefore = creditRes.balanceBefore;
+      balanceAfter = creditRes.balanceAfter;
+    } else {
+      const freshUser = await db.getUserById(user.id) || user;
+      balanceBefore = parseFloat(freshUser.walletBalance || 0);
+      const currentTotalDeposited = parseFloat(freshUser.totalDeposited || 0);
+      freshUser.walletBalance = Math.round((balanceBefore + netCredit) * 100) / 100;
+      freshUser.totalDeposited = Math.round((currentTotalDeposited + netCredit) * 100) / 100;
+      creditedUser = await db.saveUser(freshUser);
+      balanceAfter = creditedUser.walletBalance;
+    }
+
+    const timestamp = data.tranDateTime || payload.tranDateTime || new Date().toISOString();
+
+    // 7. Create Ledger Transaction Record
+    tx = {
+      id: sessionId,
+      userId: creditedUser.id,
+      userFullName: creditedUser.fullName || `${creditedUser.firstName || ''} ${creditedUser.lastName || ''}`.trim() || 'STRICTWALLET User',
+      userEmail: creditedUser.email,
+      type: 'deposit',
+      channel: 'virtual_account',
+      bank: 'Sterling Bank',
+      virtualAccountNumber: accountNumber,
+      amount: netCredit,
+      grossAmount: incomingGross,
+      availableAmount: availableAmount,
+      chargedAmount: incomingGross,
+      fee: STRICTWALLET_TRANSFER_FEE,
+      providerFee: parseFloat(rawFeeAmount || 0),
+      vatAmount: parseFloat(rawVatAmount || 0),
+      currency: currency,
+      providerReference: sessionId,
+      sessionId: sessionId,
+      initiationTranRef: initiationTranRef,
+      settlementId: settlementId,
+      sourceAccountNumber: data.sourceAccountNumber || payload.sourceAccountNumber || null,
+      sourceAccountName: data.sourceAccountName || payload.sourceAccountName || null,
+      sourceBankName: data.sourceBankName || payload.sourceBankName || null,
+      channelId: data.channelId || payload.channelId || null,
+      status: 'Successful',
+      credited: true,
+      creditedAt: new Date().toISOString(),
+      reconciledBy: 'strowallet_webhook',
+      description: `Sterling Bank Virtual Account Transfer (Gross: ₦${incomingGross.toLocaleString('en-NG', { minimumFractionDigits: 2 })}, Fee: ₦25.00, Credited: ₦${netCredit.toLocaleString('en-NG', { minimumFractionDigits: 2 })})`,
+      balanceBefore: balanceBefore,
+      balanceAfter: balanceAfter,
+      raw: payload,
+      createdAt: timestamp,
+      updatedAt: new Date().toISOString()
+    };
+    await db.createTransaction(tx);
+
+    // 8. Record Deposit Entry
+    await db.saveDeposit({
+      id: `DEP-VA-${sessionId}`,
+      reference: sessionId,
+      providerReference: sessionId,
+      userId: creditedUser.id,
+      userEmail: creditedUser.email,
+      amount: netCredit,
+      grossAmount: incomingGross,
+      fee: STRICTWALLET_TRANSFER_FEE,
+      channel: 'virtual_account',
+      bank: 'Sterling Bank',
+      status: 'Successful',
+      credited: true,
+      createdAt: timestamp,
+      updatedAt: new Date().toISOString()
+    });
+
+    console.info(`[PaymentReconciliation] Successfully credited ₦${netCredit} (Gross: ₦${incomingGross}, Fee: ₦25) to user ${creditedUser.id} (${creditedUser.email}) via Sterling Bank VA ${accountNumber}`);
+
+    // Trigger Transactional SMS Credit Alert asynchronously
+    try {
+      const { sendTransactionalAlert } = require('./smsAlertService');
+      sendTransactionalAlert({
+        userId: creditedUser.id,
+        alertType: 'credit',
+        amount: netCredit,
+        userBalance: balanceAfter,
+        balanceType: 'main',
+        desc: `Credited ₦${netCredit}`,
+        reference: sessionId,
+        transactionType: 'deposit'
+      }).catch(err => console.error('[Sterling VA SMS Alert Error]:', err.message));
+    } catch (smsErr) {
+      console.warn('[PaymentReconciliation] SMS alert error:', smsErr.message);
+    }
+
+    return {
+      success: true,
+      status: 'Successful',
+      credited: true,
+      newBalance: balanceAfter,
+      transaction: tx
+    };
+  });
+}
+
 module.exports = {
   reconcileDepositTransaction,
+  reconcileStrowalletTransfer,
   runAutomaticReconciliation,
   startPaymentReconciliationWorker,
   stopPaymentReconciliationWorker

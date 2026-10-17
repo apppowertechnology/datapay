@@ -203,6 +203,24 @@ const defaultSocialLinks = {
   }
 };
 
+// Normalize customer record to ensure both firstName/lastName and fullName are consistently available
+function normalizeUserRecord(user) {
+  if (!user || typeof user !== 'object') return user;
+  const rawHadFirstName = Boolean(user.firstName && String(user.firstName).trim());
+  const rawHadLastName = Boolean(user.lastName && String(user.lastName).trim());
+  if (user.rawHasSeparateNames === undefined) {
+    user.rawHasSeparateNames = rawHadFirstName && rawHadLastName;
+  }
+  if (!user.fullName && (user.firstName || user.lastName)) {
+    user.fullName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  } else if (user.fullName && (!user.firstName || !user.lastName)) {
+    const parts = user.fullName.trim().split(/\s+/);
+    if (!user.firstName) user.firstName = parts[0] || '';
+    if (!user.lastName) user.lastName = parts.slice(1).join(' ') || user.firstName;
+  }
+  return user;
+}
+
 const db = {
   async init() {
     if (isFirebaseAvailable && dbRef !== null) {
@@ -253,6 +271,24 @@ const db = {
       await verifyReachability(DB_TIMEOUT_MS);
       isFirebaseAvailable = true;
       console.log(`[Firebase Init] SUCCESS: Connected and verified reachability to Firebase Realtime Database: ${dbUrl}`);
+
+      // Ensure all baseline data plans exist in Firebase RTDB
+      try {
+        const plansSnap = await executeWithRetry(() => dbRef.child('dataPlans').once('value'));
+        const existingFbPlans = plansSnap.val() || {};
+        const missingKeys = Object.keys(defaultDataPlans).filter(k => !existingFbPlans[k]);
+        if (missingKeys.length > 0) {
+          const toSeed = {};
+          for (const k of missingKeys) {
+            toSeed[k] = defaultDataPlans[k];
+          }
+          await executeWithRetry(() => dbRef.child('dataPlans').update(sanitizeForFirebase(toSeed)));
+          console.log(`[Firebase Init] Auto-seeded ${missingKeys.length} baseline data plans to Firebase RTDB.`);
+        }
+      } catch (seedErr) {
+        console.warn('[Firebase Init] Warning: Could not auto-sync data plans to Firebase:', seedErr.message);
+      }
+
       return true;
     } catch (reachErr) {
       isFirebaseAvailable = false;
@@ -278,7 +314,7 @@ const db = {
     if (!id) return null;
     ensureConnected();
     const snap = await executeWithRetry(() => dbRef.child(`users/${id}`).once('value'));
-    return snap.val();
+    return normalizeUserRecord(snap.val());
   },
 
   async getUserByIdentifier(identifier) {
@@ -295,13 +331,13 @@ const db = {
       const u = users[key];
       if (!u) continue;
       if (isEmail && u.email && u.email.trim().toLowerCase() === cleanIdent) {
-        return u;
+        return normalizeUserRecord(u);
       }
       if (!isEmail && cleanPhone && u.phone && normalizePhoneNumber(u.phone) === cleanPhone) {
-        return u;
+        return normalizeUserRecord(u);
       }
       if (u.email && u.email.trim().toLowerCase() === cleanIdent) {
-        return u;
+        return normalizeUserRecord(u);
       }
     }
     return null;
@@ -316,7 +352,7 @@ const db = {
     for (const key of Object.keys(users)) {
       const u = users[key];
       if (u && u.email && u.email.trim().toLowerCase() === cleanEmail) {
-        return u;
+        return normalizeUserRecord(u);
       }
     }
     return null;
@@ -332,7 +368,7 @@ const db = {
     for (const key of Object.keys(users)) {
       const u = users[key];
       if (u && u.phone && normalizePhoneNumber(u.phone) === cleanPhone) {
-        return u;
+        return normalizeUserRecord(u);
       }
     }
     return null;
@@ -341,11 +377,32 @@ const db = {
   async getUserByVirtualAccount(accNum) {
     if (!accNum) return null;
     ensureConnected();
+    const cleanTarget = String(accNum).trim();
+    const strippedTarget = cleanTarget.replace(/^0+/, '');
+    const targetNum = Number(cleanTarget);
+
     const snap = await executeWithRetry(() => dbRef.child('users').once('value'));
     const users = snap.val() || {};
     for (const key of Object.keys(users)) {
-      if (users[key] && users[key].virtualAccountNumber === accNum) {
-        return users[key];
+      const u = users[key];
+      if (!u) continue;
+      const rawAcc = u.virtualAccountNumber || u.virtual_account_number || u.accountNumber || (u.virtualAccount && u.virtualAccount.accountNumber);
+      if (!rawAcc) continue;
+
+      const userAcc = String(rawAcc).trim();
+      const strippedUserAcc = userAcc.replace(/^0+/, '');
+
+      // 1. Exact string match
+      if (userAcc === cleanTarget) {
+        return normalizeUserRecord(u);
+      }
+      // 2. Normalized stripped leading zeros (e.g. 096034733 vs 96034733)
+      if (strippedUserAcc && strippedTarget && strippedUserAcc === strippedTarget) {
+        return normalizeUserRecord(u);
+      }
+      // 3. Numeric match
+      if (!isNaN(targetNum) && Number(userAcc) === targetNum) {
+        return normalizeUserRecord(u);
       }
     }
     return null;
@@ -355,11 +412,12 @@ const db = {
     ensureConnected();
     const snap = await executeWithRetry(() => dbRef.child('users').once('value'));
     const users = snap.val() || {};
-    return Object.values(users);
+    return Object.values(users).map(normalizeUserRecord);
   },
 
   async saveUser(user) {
     ensureConnected();
+    normalizeUserRecord(user);
     user.updatedAt = new Date().toISOString();
     const sanitized = sanitizeForFirebase(user);
     await executeWithRetry(() => dbRef.child(`users/${user.id}`).set(sanitized));
@@ -372,7 +430,46 @@ const db = {
       err.isDbError = true;
       throw err;
     }
-    return saved;
+    return normalizeUserRecord(saved);
+  },
+
+  /**
+   * Atomically increment user wallet balance using Firebase Realtime Database transaction.
+   * Prevents race conditions and duplicate concurrent increments.
+   */
+  async atomicCreditUserWallet(userId, creditAmount) {
+    if (!userId || isNaN(parseFloat(creditAmount)) || parseFloat(creditAmount) <= 0) {
+      throw new Error('Valid userId and positive creditAmount required for atomic wallet credit');
+    }
+    ensureConnected();
+    const numCredit = Math.round(parseFloat(creditAmount) * 100) / 100;
+    const userRef = dbRef.child(`users/${userId}`);
+
+    let balanceBefore = 0;
+    let balanceAfter = 0;
+
+    const result = await executeWithRetry(() => userRef.transaction(currentUser => {
+      if (!currentUser) return currentUser; // Abort if user does not exist
+      balanceBefore = parseFloat(currentUser.walletBalance || 0);
+      const newBal = Math.round((balanceBefore + numCredit) * 100) / 100;
+      const currentTotalDeposited = parseFloat(currentUser.totalDeposited || 0);
+      currentUser.walletBalance = newBal;
+      currentUser.totalDeposited = Math.round((currentTotalDeposited + numCredit) * 100) / 100;
+      currentUser.updatedAt = new Date().toISOString();
+      balanceAfter = newBal;
+      return currentUser;
+    }));
+
+    if (!result.committed) {
+      throw new Error(`Firebase atomic wallet transaction was not committed for user ${userId}`);
+    }
+
+    const updated = normalizeUserRecord(result.snapshot.val());
+    return {
+      user: updated,
+      balanceBefore,
+      balanceAfter: updated.walletBalance
+    };
   },
 
   // ==========================================
@@ -405,11 +502,20 @@ const db = {
   async getTransactionByReference(ref) {
     if (!ref) return null;
     ensureConnected();
+    const cleanRef = String(ref).trim();
     const snap = await executeWithRetry(() => dbRef.child('transactions').once('value'));
     const all = snap.val() || {};
     for (const key of Object.keys(all)) {
       const tx = all[key];
-      if (tx && (tx.id === ref || tx.providerReference === ref || tx.reference === ref || tx.paystackReference === ref)) {
+      if (tx && (
+        tx.id === cleanRef ||
+        tx.providerReference === cleanRef ||
+        tx.reference === cleanRef ||
+        tx.paystackReference === cleanRef ||
+        tx.sessionId === cleanRef ||
+        (tx.initiationTranRef && String(tx.initiationTranRef).trim() === cleanRef) ||
+        (tx.settlementId && String(tx.settlementId).trim() === cleanRef)
+      )) {
         return tx;
       }
     }
@@ -477,15 +583,23 @@ const db = {
       executeWithRetry(() => dbRef.child('dataPlans').once('value')),
       executeWithRetry(() => dbRef.child('deletedPlans').once('value'))
     ]);
-    const fbPlans = plansSnap.val();
+    const fbPlans = plansSnap.val() || {};
     const deletedPlans = deletedSnap.val() || {};
 
-    if (fbPlans && Object.keys(fbPlans).length > 0) {
-      return Object.values(fbPlans).filter(p => p && !deletedPlans[p.id]);
+    // Merge baseline default plans with Firebase overrides/customizations
+    const merged = {};
+    for (const [id, plan] of Object.entries(defaultDataPlans)) {
+      if (plan && !deletedPlans[id]) {
+        merged[id] = { ...plan };
+      }
+    }
+    for (const [id, plan] of Object.entries(fbPlans)) {
+      if (plan && !deletedPlans[id]) {
+        merged[id] = { ...(merged[id] || {}), ...plan };
+      }
     }
 
-    // Default seed plans in memory without overwriting Firebase
-    return Object.values(defaultDataPlans).filter(p => p && !deletedPlans[p.id]);
+    return Object.values(merged).filter(p => p && p.id && !deletedPlans[p.id]);
   },
 
   async getDataPlanById(id) {
@@ -958,6 +1072,35 @@ const db = {
     const all = snap.val() || {};
     return Object.values(all)
       .filter(w => w && w.userId === userId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  // ==========================================
+  // SMS ALERTS REVENUE & AUDIT LEDGER
+  // ==========================================
+  async createSmsAlertRecord(record) {
+    ensureConnected();
+    record.createdAt = record.createdAt || new Date().toISOString();
+    const sanitized = sanitizeForFirebase(record);
+    await executeWithRetry(() => dbRef.child(`smsAlerts/${record.id}`).set(sanitized));
+    return record;
+  },
+
+  async getAllSmsAlerts() {
+    ensureConnected();
+    const snap = await executeWithRetry(() => dbRef.child('smsAlerts').once('value'));
+    const all = snap.val() || {};
+    return Object.values(all)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  },
+
+  async getUserSmsAlerts(userId) {
+    if (!userId) return [];
+    ensureConnected();
+    const snap = await executeWithRetry(() => dbRef.child('smsAlerts').once('value'));
+    const all = snap.val() || {};
+    return Object.values(all)
+      .filter(s => s && s.userId === userId)
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }
 };

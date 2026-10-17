@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
-const { verifyAccount } = require('../services/strowallet');
+const { verifyAccount, createSterlingVirtualAccount } = require('../services/strowallet');
 const { authenticateToken } = require('../middleware/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'strictwallet_jwt_secret_production_ready_key_2026_!98#x';
@@ -36,10 +36,31 @@ function validateStrongPassword(password) {
 // 1. USER REGISTRATION
 router.post('/register', async (req, res) => {
   try {
-    const { fullName, email, phone, password, confirmPassword, nextOfKin } = req.body;
+    const { firstName, lastName, fullName, email, phone, password, confirmPassword, nextOfKin } = req.body;
+
+    const trimmedFirstName = (firstName || '').trim();
+    const trimmedLastName = (lastName || '').trim();
+
+    let finalFirstName = trimmedFirstName;
+    let finalLastName = trimmedLastName;
+
+    // Graceful fallback for legacy callers that might pass fullName
+    if ((!finalFirstName || !finalLastName) && fullName) {
+      const parts = fullName.trim().split(/\s+/);
+      if (!finalFirstName) finalFirstName = parts[0] || '';
+      if (!finalLastName) finalLastName = parts.slice(1).join(' ') || '';
+    }
 
     // Validation
-    if (!fullName || !email || !phone || !password || !confirmPassword || !nextOfKin) {
+    if (!finalFirstName) {
+      return res.status(400).json({ success: false, message: 'First Name is required.' });
+    }
+
+    if (!finalLastName) {
+      return res.status(400).json({ success: false, message: 'Last Name is required.' });
+    }
+
+    if (!email || !phone || !password || !confirmPassword || !nextOfKin) {
       return res.status(400).json({ success: false, message: 'All registration fields are required.' });
     }
 
@@ -83,11 +104,16 @@ router.post('/register', async (req, res) => {
     const nextOfKinAnswer = nextOfKin.trim().toLowerCase();
 
     const userId = `usr_${uuidv4().replace(/-/g, '').slice(0, 12)}`;
+    const finalFullName = `${finalFirstName} ${finalLastName}`.trim();
 
-    // Prepare initial user object
+    // Prepare initial user object with separate first and last names + composite fullName
     const newUser = {
       id: userId,
-      fullName: fullName.trim(),
+      firstName: finalFirstName,
+      lastName: finalLastName,
+      fullName: finalFullName,
+      nameDetailsUpdated: true,
+      rawHasSeparateNames: true,
       email: cleanEmail,
       phone: cleanPhone,
       passwordHash: passwordHash,
@@ -113,6 +139,34 @@ router.post('/register', async (req, res) => {
       const dbErr = new Error(`Firebase persistence confirmation failed for user ${newUser.id} (${cleanEmail})`);
       dbErr.isDbError = true;
       throw dbErr;
+    }
+
+    // Automatic Sterling Bank virtual account creation via Strowallet
+    if (!verifiedUser.virtualAccountNumber) {
+      try {
+        const vaResult = await createSterlingVirtualAccount({
+          firstName: verifiedUser.firstName,
+          lastName: verifiedUser.lastName,
+          accountName: verifiedUser.fullName,
+          email: verifiedUser.email,
+          phone: verifiedUser.phone
+        });
+
+        if (vaResult && vaResult.success && vaResult.accountNumber) {
+          verifiedUser.virtualBankName = 'Sterling Bank';
+          verifiedUser.virtualAccountNumber = vaResult.accountNumber;
+          verifiedUser.virtualAccountName = vaResult.accountName || verifiedUser.fullName;
+          verifiedUser.virtualAccountCreatedAt = new Date().toISOString();
+          verifiedUser.virtualAccountProvider = 'strowallet';
+          await db.saveUser(verifiedUser);
+          console.info(`[Auth Register] Sterling Bank virtual account assigned to user ${verifiedUser.id}: ${vaResult.accountNumber}`);
+        } else {
+          console.warn(`[Auth Register] Virtual account not assigned during registration: ${vaResult?.message || 'Provider unavailable'}`);
+        }
+      } catch (vaErr) {
+        console.warn('[Auth Register] Strowallet virtual account creation error during signup:', vaErr.message);
+        // Do not block signup if provider is temporarily unavailable; user can generate later from dashboard
+      }
     }
 
     // Generate JWT token only after verified write
@@ -175,6 +229,17 @@ router.post('/login', async (req, res) => {
 
     const { passwordHash, nextOfKinAnswer, transactionPinHash, ...safeUser } = user;
     safeUser.hasPin = !!transactionPinHash;
+    const isOldUser = (!user.rawHasSeparateNames && !user.nameDetailsUpdated) || (!user.firstName || !user.lastName);
+    safeUser.needsNameUpdate = Boolean(isOldUser && !user.nameDetailsUpdated && user.role !== 'admin');
+    safeUser.nameDetailsUpdated = Boolean(user.nameDetailsUpdated);
+    safeUser.rawHasSeparateNames = Boolean(user.rawHasSeparateNames);
+    if (!safeUser.fullName && (safeUser.firstName || safeUser.lastName)) {
+      safeUser.fullName = `${safeUser.firstName || ''} ${safeUser.lastName || ''}`.trim();
+    } else if (safeUser.fullName && (!safeUser.firstName || !safeUser.lastName)) {
+      const parts = safeUser.fullName.trim().split(/\s+/);
+      if (!safeUser.firstName) safeUser.firstName = parts[0] || '';
+      if (!safeUser.lastName) safeUser.lastName = parts.slice(1).join(' ') || safeUser.firstName;
+    }
 
     return res.json({
       success: true,
@@ -294,6 +359,17 @@ router.get('/me', authenticateToken, async (req, res) => {
 
     const { passwordHash, nextOfKinAnswer, transactionPinHash, ...safeUser } = user;
     safeUser.hasPin = !!transactionPinHash;
+    const isOldUser = (!user.rawHasSeparateNames && !user.nameDetailsUpdated) || (!user.firstName || !user.lastName);
+    safeUser.needsNameUpdate = Boolean(isOldUser && !user.nameDetailsUpdated && user.role !== 'admin');
+    safeUser.nameDetailsUpdated = Boolean(user.nameDetailsUpdated);
+    safeUser.rawHasSeparateNames = Boolean(user.rawHasSeparateNames);
+    if (!safeUser.fullName && (safeUser.firstName || safeUser.lastName)) {
+      safeUser.fullName = `${safeUser.firstName || ''} ${safeUser.lastName || ''}`.trim();
+    } else if (safeUser.fullName && (!safeUser.firstName || !safeUser.lastName)) {
+      const parts = safeUser.fullName.trim().split(/\s+/);
+      if (!safeUser.firstName) safeUser.firstName = parts[0] || '';
+      if (!safeUser.lastName) safeUser.lastName = parts.slice(1).join(' ') || safeUser.firstName;
+    }
 
     return res.json({
       success: true,
@@ -367,6 +443,71 @@ router.post('/bank/verify', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[Bank Verify Error]:', error);
     return res.status(500).json({ success: false, message: 'Server error during account verification.' });
+  }
+});
+
+// 8. UPDATE FIRST AND LAST NAME DETAILS (FOR ELIGIBLE OLD USERS)
+router.post('/update-name', authenticateToken, async (req, res) => {
+  try {
+    const { firstName, lastName } = req.body;
+
+    const trimmedFirstName = (firstName || '').trim();
+    const trimmedLastName = (lastName || '').trim();
+
+    // Validation requirements: reject empty or whitespace-only values
+    if (!trimmedFirstName) {
+      return res.status(400).json({ success: false, message: 'First Name is required and cannot be empty.' });
+    }
+
+    if (!trimmedLastName) {
+      return res.status(400).json({ success: false, message: 'Last Name is required and cannot be empty.' });
+    }
+
+    if (trimmedFirstName.length < 2) {
+      return res.status(400).json({ success: false, message: 'First Name must be at least 2 characters.' });
+    }
+
+    if (trimmedLastName.length < 2) {
+      return res.status(400).json({ success: false, message: 'Last Name must be at least 2 characters.' });
+    }
+
+    const nameRegex = /^[A-Za-z\s'-]+$/;
+    if (!nameRegex.test(trimmedFirstName) || !nameRegex.test(trimmedLastName)) {
+      return res.status(400).json({ success: false, message: 'Names can only contain letters, spaces, hyphens, and apostrophes.' });
+    }
+
+    const user = await db.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const updatedFullName = `${trimmedFirstName} ${trimmedLastName}`.trim();
+
+    // Preserve all existing user details while updating names and persisting update status to Firebase
+    user.firstName = trimmedFirstName;
+    user.lastName = trimmedLastName;
+    user.fullName = updatedFullName;
+    user.nameDetailsUpdated = true;
+    user.rawHasSeparateNames = true;
+    user.nameUpdatedAt = new Date().toISOString();
+    user.updatedAt = new Date().toISOString();
+
+    await db.saveUser(user);
+
+    const { passwordHash, nextOfKinAnswer, transactionPinHash, ...safeUser } = user;
+    safeUser.hasPin = !!transactionPinHash;
+    safeUser.needsNameUpdate = false;
+    safeUser.nameDetailsUpdated = true;
+    safeUser.rawHasSeparateNames = true;
+
+    return res.json({
+      success: true,
+      message: 'Name details updated successfully.',
+      user: safeUser
+    });
+  } catch (err) {
+    console.error('[Update Name Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update name details. Please try again.' });
   }
 });
 

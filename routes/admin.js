@@ -37,6 +37,8 @@ router.get('/stats', async (req, res) => {
         } else if (tx.type === 'data') {
           totalDataSales += amt;
           totalProfit += prf;
+        } else if (tx.type === 'sms_charge') {
+          totalProfit += prf;
         }
       } else if (tx.status === 'Pending') {
         pendingTxCount++;
@@ -232,6 +234,21 @@ router.post('/users/:id/adjust-balance', async (req, res) => {
       action: `WALLET_ADJUSTMENT_${type.toUpperCase()}`,
       description: `Admin adjusted balance for ${user.fullName} (${user.email}): ${type === 'credit' ? '+' : '-'}₦${adjustAmt}. Reason: ${reason}`
     });
+
+    // Trigger Transactional SMS Alert asynchronously if enabled
+    try {
+      const { sendTransactionalAlert } = require('../services/smsAlertService');
+      sendTransactionalAlert({
+        userId: user.id,
+        alertType: type === 'credit' ? 'credit' : 'debit',
+        amount: adjustAmt,
+        userBalance: user.walletBalance,
+        balanceType: 'main',
+        desc: type === 'credit' ? `Credited ₦${adjustAmt}` : `Debited ₦${adjustAmt}`,
+        reference: tx.id,
+        transactionType: type === 'credit' ? 'deposit' : 'withdrawal'
+      }).catch(err => console.error('[Admin Adj SMS Alert Error]:', err.message));
+    } catch (_) {}
 
     return res.json({
       success: true,
@@ -1076,6 +1093,70 @@ router.post('/deposits/reconcile', async (req, res) => {
   } catch (error) {
     console.error('[Admin Deposit Reconcile Error]:', error);
     return res.status(500).json({ success: false, message: 'Reconciliation failed: ' + error.message });
+  }
+});
+
+// 15. SMS ALERT REVENUE & AUDIT
+router.get('/sms-revenue', async (req, res) => {
+  try {
+    const alerts = await db.getAllSmsAlerts();
+
+    // Financial formulas strictly per requirement:
+    // SMS Revenue = Number of Successfully Charged SMS Alerts × ₦10
+    // SMS Provider Cost = Number of SMS Alerts With Confirmed Provider Charges × ₦6
+    // SMS Gross Profit = SMS Revenue − SMS Provider Cost
+    const successfulAlerts = alerts.filter(a => a && a.status === 'sent' && parseFloat(a.customerCharge || 0) > 0);
+    const totalSmsSent = successfulAlerts.length;
+    const totalSmsRevenue = Math.round(totalSmsSent * 10.00 * 100) / 100;
+    const totalProviderCost = Math.round(totalSmsSent * 6.00 * 100) / 100;
+    const totalGrossProfit = Math.round((totalSmsRevenue - totalProviderCost) * 100) / 100;
+
+    return res.json({
+      success: true,
+      stats: {
+        totalSmsSent,
+        totalSmsRevenue,
+        totalProviderCost,
+        totalGrossProfit,
+        failedCount: alerts.filter(a => a && a.status === 'failed').length,
+        timeoutCount: alerts.filter(a => a && (a.status === 'timeout' || a.status === 'uncertain')).length,
+        totalAlertAttempts: alerts.length
+      },
+      alerts
+    });
+  } catch (error) {
+    console.error('[Admin SMS Revenue Error]:', error);
+    return res.status(500).json({ success: false, message: 'Failed to retrieve SMS revenue data.' });
+  }
+});
+
+// 16. SMS SENDER ID MANAGEMENT
+router.get('/sms/sender-id', async (req, res) => {
+  try {
+    const rawSenderId = process.env.STROWALLET_SENDER_ID || 'STWALLET';
+    const cleanSenderId = String(rawSenderId).trim().replace(/[^a-zA-Z0-9]/g, '').substring(0, 11);
+
+    return res.json({
+      success: true,
+      senderId: cleanSenderId,
+      maxLength: 11,
+      rule: 'Maximum 11 alphanumeric characters without spaces'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to retrieve sender ID information.' });
+  }
+});
+
+router.post('/sms/sender-id', async (req, res) => {
+  try {
+    const { senderId } = req.body;
+    const { submitSenderId } = require('../services/strowallet');
+
+    const result = await submitSenderId(senderId);
+    return res.json(result);
+  } catch (error) {
+    console.error('[Admin Submit Sender ID Error]:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to submit sender ID.' });
   }
 });
 

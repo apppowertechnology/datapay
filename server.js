@@ -15,6 +15,12 @@ app.use(express.json({
     req.rawBody = buf;
   }
 }));
+app.use(express.text({
+  type: ['text/*', 'application/octet-stream'],
+  verify: (req, res, buf) => {
+    if (!req.rawBody) req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Serve static frontend files directly from project root

@@ -7,6 +7,7 @@ const db = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 const strowallet = require('../services/strowallet');
 const cloudinary = require('../services/cloudinary');
+const { sendTransactionalAlert } = require('../services/smsAlertService');
 
 // Helper to generate a clean, safe URL slug
 function generateSlug(text) {
@@ -563,8 +564,9 @@ router.post('/:id/purchase', authenticateToken, async (req, res) => {
     await db.updateEvent(event.id, { ticketTypes: event.ticketTypes });
 
     // 3. Credit Event Creator's Organizer Wallet
+    let updatedCreatorWallet = null;
     if (creatorEarnings > 0) {
-      await db.creditOrganizerWallet(event.creatorId, creatorEarnings);
+      updatedCreatorWallet = await db.creditOrganizerWallet(event.creatorId, creatorEarnings);
     }
 
     // 4. Generate Unique Ticket ID & QR Verification Token
@@ -624,6 +626,35 @@ router.post('/:id/purchase', authenticateToken, async (req, res) => {
       createdAt: new Date().toISOString()
     };
     await db.createTransaction(txRecord);
+
+    // 6. Trigger Transactional SMS Alerts asynchronously
+    // Alert Buyer (Debit on Main Wallet)
+    if (ticketPrice > 0) {
+      sendTransactionalAlert({
+        userId: buyer.id,
+        alertType: 'debit',
+        amount: ticketPrice,
+        userBalance: buyer.walletBalance,
+        balanceType: 'main',
+        desc: `Debited ₦${ticketPrice}`,
+        reference: ticketId,
+        transactionType: 'ticket_purchase'
+      }).catch(err => console.error('[Buyer Ticket SMS Alert Error]:', err.message));
+    }
+
+    // Alert Event Creator (Credit on Event Creator Wallet)
+    if (creatorEarnings > 0 && updatedCreatorWallet) {
+      sendTransactionalAlert({
+        userId: event.creatorId,
+        alertType: 'credit',
+        amount: creatorEarnings,
+        userBalance: updatedCreatorWallet.balance,
+        balanceType: 'organizer',
+        desc: `Credited ₦${creatorEarnings}`,
+        reference: `CREATOR-${ticketId}`,
+        transactionType: 'creator_credit'
+      }).catch(err => console.error('[Organizer Ticket SMS Alert Error]:', err.message));
+    }
 
     return res.status(201).json({
       success: true,
@@ -1052,6 +1083,18 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
       wallet.totalWithdrawn = Math.round(((parseFloat(wallet.totalWithdrawn) || 0) + withdrawAmount) * 100) / 100;
       await db.saveOrganizerWallet(wallet);
       await db.updateEventWithdrawal(withdrawalRecord.id, withdrawalRecord);
+
+      // Trigger Transactional SMS Debit Alert for Event Creator Wallet
+      sendTransactionalAlert({
+        userId: user.id,
+        alertType: 'debit',
+        amount: withdrawAmount,
+        userBalance: wallet.balance,
+        balanceType: 'organizer',
+        desc: `Debited ₦${withdrawAmount}`,
+        reference: withdrawalRecord.id,
+        transactionType: 'creator_withdrawal'
+      }).catch(err => console.error('[Creator Withdrawal SMS Alert Error]:', err.message));
 
       return res.json({
         success: true,

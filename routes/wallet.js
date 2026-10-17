@@ -7,6 +7,7 @@ const { purchaseAirtime, purchaseData } = require('../services/maskawasub');
 const paystackService = require('../services/paystack');
 const { reconcileDepositTransaction } = require('../services/paymentReconciliation');
 const { authenticateToken } = require('../middleware/auth');
+const { sendTransactionalAlert } = require('../services/smsAlertService');
 
 // Network mapping
 const NETWORK_NAMES = {
@@ -31,7 +32,10 @@ router.get('/overview', authenticateToken, async (req, res) => {
         totalDeposited: parseFloat(user.totalDeposited || 0),
         totalAirtimeSpent: parseFloat(user.totalAirtimeSpent || 0),
         totalDataSpent: parseFloat(user.totalDataSpent || 0),
-        // Virtual account fields removed; funding via Paystack
+        virtualBankName: user.virtualAccountNumber ? (user.virtualBankName || 'Sterling Bank') : null,
+        virtualAccountNumber: user.virtualAccountNumber || null,
+        virtualAccountName: user.virtualAccountName || (user.virtualAccountNumber ? (user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim()) : null),
+        smsAlertsEnabled: user.smsAlertsEnabled === true,
         hasPin: !!user.transactionPinHash,
         status: user.status
       },
@@ -226,6 +230,18 @@ router.post('/buy-airtime', authenticateToken, async (req, res) => {
       });
     }
 
+    // Trigger Transactional SMS Debit Alert asynchronously if enabled
+    sendTransactionalAlert({
+      userId: user.id,
+      alertType: 'debit',
+      amount: sellingPrice,
+      userBalance: user.walletBalance,
+      balanceType: 'main',
+      desc: `Debited ₦${sellingPrice}`,
+      reference: txId,
+      transactionType: 'airtime'
+    }).catch(err => console.error('[Airtime SMS Alert Error]:', err.message));
+
     return res.json({
       success: true,
       message: `₦${sellingPrice.toLocaleString()} ${NETWORK_NAMES[netId]} Airtime delivered successfully to ${phone}!`,
@@ -328,6 +344,18 @@ router.post('/buy-data', authenticateToken, async (req, res) => {
         newBalance: user.walletBalance
       });
     }
+
+    // Trigger Transactional SMS Debit Alert asynchronously if enabled
+    sendTransactionalAlert({
+      userId: user.id,
+      alertType: 'debit',
+      amount: sellingPrice,
+      userBalance: user.walletBalance,
+      balanceType: 'main',
+      desc: `Debited ₦${sellingPrice}`,
+      reference: txId,
+      transactionType: 'data'
+    }).catch(err => console.error('[Data SMS Alert Error]:', err.message));
 
     return res.json({
       success: true,
@@ -682,6 +710,169 @@ router.post('/deposit/cancel', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('[Cancel Deposit Error]:', error);
     return res.status(500).json({ success: false, message: 'Failed to cancel deposit.' });
+  }
+});
+
+// 12. GENERATE STERLING BANK VIRTUAL ACCOUNT (For existing users who don't have one yet)
+const vaGenerationLocks = new Set();
+
+router.post('/virtual-account/generate', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  if (vaGenerationLocks.has(userId)) {
+    return res.status(429).json({
+      success: false,
+      message: 'Virtual account generation is currently in progress. Please wait a moment.'
+    });
+  }
+
+  vaGenerationLocks.add(userId);
+
+  try {
+    const user = await db.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Check if user already has an assigned virtual account (prevent duplicate creation)
+    if (user.virtualAccountNumber) {
+      return res.json({
+        success: true,
+        alreadyExists: true,
+        message: 'You already have an assigned Sterling Bank virtual account.',
+        virtualAccount: {
+          bankName: user.virtualBankName || 'Sterling Bank',
+          accountNumber: user.virtualAccountNumber,
+          accountName: user.virtualAccountName || user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim()
+        }
+      });
+    }
+
+    const reqFirstName = typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : '';
+    const reqLastName = typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : '';
+
+    const resolvedFirstName = reqFirstName || (user.firstName || '').trim() || (user.fullName ? user.fullName.split(' ')[0] : '');
+    const resolvedLastName = reqLastName || (user.lastName || '').trim() || (user.fullName ? user.fullName.split(' ').slice(1).join(' ') : resolvedFirstName);
+
+    if (!resolvedFirstName || !resolvedLastName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer First Name and Last Name are required for virtual account creation. Please update your details in Settings first.'
+      });
+    }
+
+    const resolvedAccountName = user.virtualAccountName || user.fullName || `${resolvedFirstName} ${resolvedLastName}`.trim();
+
+    const { createSterlingVirtualAccount } = require('../services/strowallet');
+    const vaResult = await createSterlingVirtualAccount({
+      firstName: resolvedFirstName,
+      lastName: resolvedLastName,
+      accountName: resolvedAccountName,
+      email: user.email,
+      phone: user.phone
+    });
+
+    if (!vaResult.success || !vaResult.accountNumber) {
+      return res.status(400).json({
+        success: false,
+        message: vaResult.message || 'Unable to generate Sterling Bank virtual account. Please try again shortly.'
+      });
+    }
+
+    // Save actual account details against authenticated user record
+    user.virtualBankName = 'Sterling Bank';
+    user.virtualAccountNumber = vaResult.accountNumber;
+    user.virtualAccountName = vaResult.accountName || resolvedAccountName;
+    user.virtualAccountCreatedAt = new Date().toISOString();
+    user.virtualAccountProvider = 'strowallet';
+    await db.saveUser(user);
+
+    console.info(`[Wallet VA Generation] Successfully assigned Sterling Bank virtual account to user ${user.id}: ${vaResult.accountNumber}`);
+
+    return res.json({
+      success: true,
+      message: 'Sterling Bank virtual account generated successfully!',
+      virtualAccount: {
+        bankName: 'Sterling Bank',
+        accountNumber: vaResult.accountNumber,
+        accountName: user.virtualAccountName
+      }
+    });
+  } catch (err) {
+    console.error('[Generate Sterling VA Error]:', err);
+    return res.status(500).json({ success: false, message: 'Server error generating Sterling virtual account. Please try again.' });
+  } finally {
+    vaGenerationLocks.delete(userId);
+  }
+});
+
+// 12B. VERIFY AND RECONCILE STERLING BANK VIRTUAL ACCOUNT TRANSFER BY SESSION ID
+router.post('/virtual-account/verify-session', authenticateToken, async (req, res) => {
+  try {
+    const { sessionId, amount } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ success: false, message: 'Transaction session ID is required.' });
+    }
+
+    const user = await db.getUserById(req.user.id);
+    if (!user || !user.virtualAccountNumber) {
+      return res.status(400).json({ success: false, message: 'You do not have an assigned virtual account.' });
+    }
+
+    const { verifySessionId } = require('../services/strowallet');
+    const { reconcileStrowalletTransfer } = require('../services/paymentReconciliation');
+
+    const verifyRes = await verifySessionId(sessionId, amount || 0);
+    if (!verifyRes.success || !verifyRes.data) {
+      return res.status(400).json({
+        success: false,
+        message: verifyRes.message || 'Transaction session not found or not yet confirmed by the bank.'
+      });
+    }
+
+    const providerData = verifyRes.data;
+    const transferPayload = {
+      sessionId: String(sessionId).trim(),
+      accountNumber: user.virtualAccountNumber,
+      transactionAmount: providerData.transactionAmount || providerData.amount || amount,
+      settledAmount: providerData.settledAmount || providerData.amount || amount,
+      raw: providerData
+    };
+
+    const reconResult = await reconcileStrowalletTransfer(transferPayload, { skipVerification: true });
+    return res.json({
+      success: reconResult.success,
+      alreadyCredited: reconResult.alreadyCredited,
+      message: reconResult.message || 'Transfer reconciled successfully.',
+      newBalance: reconResult.newBalance
+    });
+  } catch (err) {
+    console.error('[Verify Sterling Session Error]:', err);
+    return res.status(500).json({ success: false, message: 'Server error verifying transfer session.' });
+  }
+});
+
+// 13. UPDATE TRANSACTIONAL SMS ALERT SETTINGS (ON / OFF)
+router.post('/sms/settings', authenticateToken, async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Invalid settings format: enabled (boolean) required.' });
+    }
+
+    const user = await db.getUserById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    user.smsAlertsEnabled = enabled;
+    await db.saveUser(user);
+
+    return res.json({
+      success: true,
+      message: user.smsAlertsEnabled ? 'Transactional SMS alerts are now active.' : 'Transactional SMS alerts turned off.',
+      smsAlertsEnabled: user.smsAlertsEnabled
+    });
+  } catch (err) {
+    console.error('[SMS Settings Error]:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update SMS alert settings.' });
   }
 });
 
