@@ -1504,31 +1504,69 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
   margin-top: 2px;
 }
 
-/* Enhanced Table Scrollbar */
-.table-responsive {
+/* Enhanced Table Scrollbar & Universal Table Responsiveness */
+.table-responsive,
+.table-container {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   border-radius: var(--radius-md);
   position: relative;
+  max-width: 100%;
 }
 
-.table-responsive::-webkit-scrollbar {
+.table-responsive::-webkit-scrollbar,
+.table-container::-webkit-scrollbar {
   height: 6px;
 }
 
-.table-responsive::-webkit-scrollbar-track {
+.table-responsive::-webkit-scrollbar-track,
+.table-container::-webkit-scrollbar-track {
   background: rgba(255, 255, 255, 0.04);
   border-radius: 4px;
 }
 
-.table-responsive::-webkit-scrollbar-thumb {
+.table-responsive::-webkit-scrollbar-thumb,
+.table-container::-webkit-scrollbar-thumb {
   background: rgba(0, 208, 156, 0.35);
   border-radius: 4px;
 }
 
-.table-responsive::-webkit-scrollbar-thumb:hover {
+.table-responsive::-webkit-scrollbar-thumb:hover,
+.table-container::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 208, 156, 0.6);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  text-align: left;
+  min-width: 620px;
+}
+
+.data-table th {
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 /* ==========================================================================
@@ -1563,12 +1601,18 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
     z-index: 1100;
     transform: translateX(-100%);
     box-shadow: none;
-    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.3s ease;
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
   }
 
   .sidebar.mobile-open {
     transform: translateX(0);
     box-shadow: 6px 0 35px rgba(0, 0, 0, 0.8);
+    visibility: visible;
+    pointer-events: auto;
+    overflow-y: auto;
   }
 
   /* Backdrop Overlay for Mobile Drawer */
@@ -1717,6 +1761,154 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
     min-width: 0 !important;
   }
 
+  /* Preserve Horizontal Row Alignment for Card Headers with Badges (Stat Cards, Virtual Account, Airtime, Data, Settings) */
+  .card-header:has(.card-icon-badge),
+  .card-header:has(.card-title:only-child),
+  #sterlingAccountActive .card-header,
+  #sterlingAccountNotGenerated .card-header,
+  .grid-cards-4 .card-header,
+  .grid-cards-2 .card-header:has(.card-icon-badge) {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+  }
+
+  .card-header:has(.card-icon-badge) > div:first-child,
+  #sterlingAccountActive .card-header > div:first-child,
+  #sterlingAccountNotGenerated .card-header > div:first-child,
+  .grid-cards-4 .card-header > div:first-child {
+    width: auto !important;
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .card-header:has(.card-icon-badge) > .card-icon-badge,
+  .card-header:has(.card-icon-badge) > div.card-icon-badge,
+  .card-header > .card-icon-badge,
+  .card-header > div.card-icon-badge,
+  .card-icon-badge {
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 44px !important;
+    height: 44px !important;
+    flex: 0 0 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+  }
+
+  /* Fallback selectors for broader browser compatibility */
+  .grid-cards-4 .card-header,
+  #sterlingAccountActive .card-header,
+  #sterlingAccountNotGenerated .card-header {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  .grid-cards-4 .card-header > div:first-child,
+  #sterlingAccountActive .card-header > div:first-child,
+  #sterlingAccountNotGenerated .card-header > div:first-child {
+    width: auto !important;
+    flex: 1 1 auto !important;
+  }
+
+  /* ==========================================================================
+     DASHBOARD STERLING VIRTUAL BANK ACCOUNT NUMBER RESPONSIVE PRESERVATION
+     ========================================================================== */
+  #sterlingAccountCard {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #sterlingAccountActive {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+  }
+
+  /* Account Number Box */
+  #sterlingAccountActive > div[style*="justify-content: space-between"] {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    padding: 12px 14px !important;
+  }
+
+  #sterlingAccountActive > div[style*="justify-content: space-between"] > div:first-child {
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  #sterlingAccountNumberDisplay {
+    font-family: var(--font-mono) !important;
+    font-size: clamp(1.1rem, 4.4vw, 1.35rem) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    color: #FFF !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    display: block !important;
+    line-height: 1.25 !important;
+  }
+
+  #btnCopySterlingAccount {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 8px 14px !important;
+    min-height: 40px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+  }
+
+  /* Account Holder Name Row */
+  #sterlingAccountActive > div:has(#sterlingAccountNameDisplay),
+  #sterlingAccountActive > div[style*="font-size: 0.84rem"] {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+  }
+
+  #sterlingAccountNameDisplay {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    text-align: right !important;
+    max-width: 65% !important;
+    font-size: clamp(0.8rem, 2.6vw, 0.86rem) !important;
+    line-height: 1.35 !important;
+  }
+
+  /* Settings Dedicated Virtual Account Card */
+  #settingsVirtualAccountDisplay {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  #settingsAccountNumberDisplay {
+    font-family: var(--font-mono) !important;
+    font-size: clamp(1.05rem, 4vw, 1.25rem) !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.05em !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  #settingsAccountNameDisplay {
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+
   /* Collapse 2-column form grids to 1 column */
   .form-row-2,
   div[style*="grid-template-columns: 1fr 1fr"],
@@ -1727,33 +1919,38 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
 
   /* Modals on Mobile */
   .modal-overlay {
-    padding: 12px;
+    padding: 12px 10px;
   }
 
   .modal-box {
-    max-height: calc(100vh - 24px);
-    max-height: calc(100dvh - 24px);
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px);
     border-radius: var(--radius-lg);
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: auto;
   }
 
   .modal-header {
-    padding: 16px 18px;
+    padding: 14px 16px;
   }
 
   .modal-body {
-    padding: 16px 18px;
+    padding: 14px 16px;
   }
 
   .modal-footer {
-    padding: 14px 18px;
+    padding: 12px 16px;
   }
 
   /* Table styling */
-  .table-custom {
+  .table-custom,
+  .data-table {
     min-width: 580px;
   }
 
-  .table-custom th, .table-custom td {
+  .table-custom th, .table-custom td,
+  .data-table th, .data-table td {
     padding: 12px 14px;
     font-size: 0.84rem;
   }
@@ -1977,6 +2174,7 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
 @media (max-width: 440px) {
   .topbar {
     padding: 0 10px;
+    gap: 6px;
   }
 
   /* Hide 'Balance:' label to prevent horizontal overflow on narrow phones */
@@ -1985,21 +2183,35 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
   }
 
   .balance-pill {
-    padding: 5px 9px;
+    padding: 5px 8px;
+    gap: 4px;
   }
 
   .balance-pill-amount {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
   }
 
   #btnQuickFund {
-    padding: 6px 10px;
-    font-size: 0.76rem;
+    padding: 6px 9px;
+    font-size: 0.74rem;
+    white-space: nowrap;
   }
 
   .content-body {
     padding: 14px 10px;
     padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Compact icon badges on small devices */
+  .card-header > .card-icon-badge,
+  .card-header > div.card-icon-badge,
+  .card-icon-badge {
+    width: 38px !important;
+    min-width: 38px !important;
+    max-width: 38px !important;
+    height: 38px !important;
+    flex: 0 0 38px !important;
+    font-size: 1.05rem !important;
   }
 
   /* All search/filter inputs full width */
@@ -2021,8 +2233,8 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
   }
 }
 
-/* --- 7. Very Small Mobile Screens (<= 360px - iPhone SE / compact devices) --- */
-@media (max-width: 360px) {
+/* --- 7. Very Small Mobile Screens (<= 380px - iPhone SE / compact devices) --- */
+@media (max-width: 380px) {
   .grid-cards-4 {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -2826,33 +3038,176 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
 }
 
 @media (max-width: 768px) {
+  .public-header {
+    padding: 12px 16px;
+    position: relative;
+    z-index: 1000;
+  }
+
+  .public-nav {
+    gap: 8px;
+    position: relative;
+  }
+
+  .public-brand {
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .public-brand img {
+    height: 36px;
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .public-brand-title {
+    font-size: 1.05rem;
+    white-space: nowrap;
+  }
+
+  .public-brand-motto {
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  .public-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .public-nav-actions .btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+    min-height: 36px;
+  }
+
+  .public-mobile-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
   .public-nav-links {
     display: none;
     position: absolute;
-    top: 100%;
+    top: calc(100% + 10px);
     left: 0;
     width: 100%;
-    background: rgba(6, 11, 25, 0.98);
+    background: #060B19 !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     flex-direction: column;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 18px 20px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95);
+    z-index: 2000;
+    gap: 8px;
   }
+
   .public-nav-links.open {
-    display: flex;
+    display: flex !important;
   }
-  .public-mobile-toggle {
+
+  .public-nav-links li {
+    width: 100%;
+    list-style: none;
+  }
+
+  .public-nav-links a {
     display: block;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.92rem;
+    font-weight: 600;
   }
+
+  .public-nav-links a:hover,
+  .public-nav-links a.active {
+    background: rgba(0, 208, 156, 0.1);
+  }
+
   .public-grid-2,
   .public-grid-3 {
     grid-template-columns: 1fr;
   }
+
   .public-footer-inner {
     grid-template-columns: 1fr;
   }
+
   .legal-content {
     padding: 24px 18px;
   }
+}
+
+@media (max-width: 440px) {
+  .public-brand-motto {
+    display: none;
+  }
+
+  .public-nav-actions .btn {
+    padding: 5px 9px;
+    font-size: 0.75rem;
+  }
+
+  .public-container {
+    padding: 24px 14px;
+  }
+
+  .public-card {
+    padding: 22px 18px;
+  }
+}
+
+@media (max-width: 380px) {
+  .public-nav-actions .btn-outline {
+    display: none;
+  }
+}
+
+/* Universal Mobile Overflow & Layout Protection */
+html, body {
+  overflow-x: hidden !important;
+  max-width: 100% !important;
+  width: 100% !important;
+}
+
+.app-container,
+.main-wrapper,
+.content-body,
+.public-container,
+.auth-wrapper {
+  max-width: 100% !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.table-responsive,
+.table-container,
+.events-nav-tabs,
+.category-pills,
+.amount-pills {
+  overflow-x: auto !important;
+  max-width: 100% !important;
+}
+
+code {
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.88em;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 
