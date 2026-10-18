@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
   <title>STRICTWALLET — Administrator Management Console</title>
   <meta name="description" content="STRICTWALLET Master Administrative Dashboard for managing users, transactions, pricing, and support.">
   
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="Image.png">
-  <link rel="apple-touch-icon" href="Image.png">
+  <link rel="icon" type="image/png" href="/Image.png">
+  <link rel="apple-touch-icon" href="/Image.png">
 
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,7 +19,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
   
   <!-- Chart.js for Admin Analytics -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -92,6 +94,14 @@
           <i class="fa-solid fa-receipt"></i>
           <span>Transaction Ledger</span>
         </div>
+        <div class="nav-item" data-admin-view="viewAdminDeposits">
+          <i class="fa-solid fa-money-bill-transfer"></i>
+          <span>Payments & Deposits</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminEvents">
+          <i class="fa-solid fa-calendar-days"></i>
+          <span>Events & Creator Payouts</span>
+        </div>
         <div class="nav-item" data-admin-view="viewAdminPricing">
           <i class="fa-solid fa-tags"></i>
           <span>Pricing & Profit</span>
@@ -107,6 +117,10 @@
         <div class="nav-item" data-admin-view="viewAdminSocial">
           <i class="fa-solid fa-share-nodes"></i>
           <span>Social Media</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminSms">
+          <i class="fa-solid fa-comment-sms"></i>
+          <span>SMS Alert Revenue</span>
         </div>
         <div class="nav-item" id="btnAdminLogout" style="color: var(--status-error); margin-top: auto;">
           <i class="fa-solid fa-right-from-bracket"></i>
@@ -345,6 +359,79 @@
           </div>
         </section>
 
+        <!-- ================= 3B. PAYMENTS & DEPOSITS MANAGEMENT ================= -->
+        <section id="viewAdminDeposits" class="view-section">
+          <!-- Search & Live Verification Tool Card -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+              <div>
+                <h2 class="card-title"><i class="fa-solid fa-magnifying-glass-dollar" style="color: var(--accent-blue);"></i> Payment Lookup & Live Verification Tool</h2>
+                <p class="card-subtitle">Search payments by Transaction Reference, Paystack Reference, User Email, Phone, or User ID. Instantly check live Paystack status.</p>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px;">
+              <input type="text" id="adminDepositLookupInput" placeholder="Enter Reference (e.g. STW-...), Email, or Phone..." style="flex: 1; min-width: 280px; padding: 10px 14px;">
+              <button class="btn btn-primary" id="btnAdminDepositLookup">
+                <i class="fa-solid fa-magnifying-glass"></i> Search & Live Verify
+              </button>
+              <button class="btn btn-secondary" id="btnAdminDepositLookupClear">
+                Clear
+              </button>
+            </div>
+
+            <!-- Lookup Results Container -->
+            <div id="adminDepositLookupResult" style="display: none; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px;">
+              <!-- Injected by admin.js -->
+            </div>
+          </div>
+
+          <!-- Master Deposits Table Card -->
+          <div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title"><i class="fa-solid fa-money-bill-transfer" style="color: var(--accent-emerald);"></i> Paystack Deposits Ledger</h2>
+                <p class="card-subtitle">Live log of customer wallet funding attempts, reconciliation states, and audit trails</p>
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <input type="text" id="adminDepositTableSearch" placeholder="Search Ref, Email, User..." style="width: 240px; padding: 8px 14px;">
+                <select id="adminDepositTableStatus" style="width: 140px; padding: 8px 12px;">
+                  <option value="all">All Statuses</option>
+                  <option value="Successful">Successful</option>
+                  <option value="Processing">Processing</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Failed">Failed</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" id="btnRefreshAdminDeposits">
+                  <i class="fa-solid fa-rotate-right"></i> Refresh
+                </button>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>User</th>
+                    <th>Amount</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Credited</th>
+                    <th>Date & Time</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="adminDepositsTableBody">
+                  <!-- Injected by admin.js -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- ================= 4. PRICING & PROFIT MANAGEMENT ================= -->
         <section id="viewAdminPricing" class="view-section">
           <div class="card">
@@ -506,6 +593,264 @@
                 </thead>
                 <tbody id="adminSocialTableBody">
                   <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 8. EVENTS & CREATOR PAYOUTS MANAGEMENT ================= -->
+        <section id="viewAdminEvents" class="view-section">
+          
+          <!-- Key Performance Indicators (KPIs) -->
+          <div class="grid-cards-4" style="margin-bottom: 20px;">
+            
+            <!-- Gross Ticket Sales -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatGrossTicketSales">₦0.00</div>
+                  <div class="card-subtitle">Gross Ticket Sales (<span id="admStatTicketsSold">0</span> sold)</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-ticket"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- STRICTWALLET 3% Commission -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatTicketCommission">₦0.00</div>
+                  <div class="card-subtitle">STRICTWALLET 3% Commission</div>
+                </div>
+                <div class="card-icon-badge purple">
+                  <i class="fa-solid fa-percent"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Event Creator Net Earnings -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatCreatorEarnings">₦0.00</div>
+                  <div class="card-subtitle">Event Creator Earnings (97%)</div>
+                </div>
+                <div class="card-icon-badge blue">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <!-- Total Events -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admStatTotalEvents">0</div>
+                  <div class="card-subtitle"><span id="admStatPublishedEvents">0</span> Published • <span id="admStatDraftEvents">0</span> Draft</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-calendar-days"></i>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Withdrawal Profit Analytics Card (Requirement 33) -->
+          <div class="card" style="margin-bottom: 24px; border: 1px solid rgba(0, 208, 156, 0.3); background: linear-gradient(135deg, rgba(13, 21, 45, 0.85) 0%, rgba(17, 27, 54, 0.85) 100%);">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title"><i class="fa-solid fa-scale-balanced" style="color: var(--accent-emerald);"></i> Event Creator Withdrawal Economics</h3>
+                <p class="card-subtitle">STRICTWALLET charges ₦20 fee (+ ₦50 stamp duty on ₦10,000+). Strowallet fee is ₦10. Platform profit is ₦10 (or ₦60 with stamp duty) per successful payout.</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="loadAdminEventsAnalytics()">
+                <i class="fa-solid fa-rotate"></i> Refresh
+              </button>
+            </div>
+
+            <div class="grid-cards-4" style="margin-top: 14px;">
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Successful Withdrawals</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: #FFF; font-family: var(--font-mono);" id="admStatSuccessfulWithdrawals">0</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Total Volume: <span id="admStatWithdrawalVolume" style="color: var(--accent-blue-light);">₦0.00</span></div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Charges Collected (₦20/tx)</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);" id="admStatChargesCollected">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">₦20 per withdrawal</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Provider Fees Paid (₦10/tx)</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--status-warning); font-family: var(--font-mono);" id="admStatProviderFees">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">Strowallet cost</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--accent-emerald);">
+                <div style="font-size: 0.75rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">STRICTWALLET Net Profit</div>
+                <div style="font-size: 1.35rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);" id="admStatNetWithdrawalProfit">₦0.00</div>
+                <div style="font-size: 0.75rem; color: var(--accent-emerald); margin-top: 2px;">₦10 / ₦60 per transfer</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: Events List Table -->
+          <div class="card" style="margin-bottom: 24px;">
+            <div class="card-header">
+              <h3 class="card-title">All Created Events</h3>
+              <input type="text" id="admEventsSearch" placeholder="Search events..." style="max-width: 250px; padding: 6px 12px; font-size: 0.82rem;" oninput="filterAdminEventsTable()">
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Event ID / Slug</th>
+                    <th>Event Name</th>
+                    <th>Event Creator</th>
+                    <th>Date & Time</th>
+                    <th>Venue</th>
+                    <th>Ticket Categories</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="admEventsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: Creator Withdrawals Ledger & Profit Table -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">Event Creator Withdrawals Ledger</h3>
+                <p class="card-subtitle">Detailed audit records of organizer bank transfer requests, fee accounting, and confirmed profit.</p>
+              </div>
+              <input type="text" id="admWithdrawalsSearch" placeholder="Search withdrawals..." style="max-width: 250px; padding: 6px 12px; font-size: 0.82rem;" oninput="filterAdminWithdrawalsTable()">
+            </div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Creator Name</th>
+                    <th>Amount</th>
+                    <th>Charge (₦20)</th>
+                    <th>Stamp Duty</th>
+                    <th>Cost (₦10)</th>
+                    <th>STRICTWALLET Profit</th>
+                    <th>Destination Bank</th>
+                    <th>Account No.</th>
+                    <th>Narration</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="admWithdrawalsTableBody">
+                  <!-- Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- 10. SMS ALERT REVENUE VIEW -->
+        <section id="viewAdminSms" class="view-section">
+          <div class="view-header">
+            <div>
+              <h2 class="view-title">SMS ALERT REVENUE</h2>
+              <p class="view-subtitle">Live financial audit and transaction ledger for Strowallet transactional SMS alerts</p>
+            </div>
+            <button class="btn btn-secondary" onclick="loadAdminSmsRevenue()">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh SMS Data
+            </button>
+          </div>
+
+          <!-- Financial Breakdown Metric Cards -->
+          <div class="grid-cards-4">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalSent">0</div>
+                  <div class="card-subtitle">Total SMS Alerts Sent</div>
+                </div>
+                <div class="card-icon-badge blue">
+                  <i class="fa-solid fa-comment-sms"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalRevenue" style="color: var(--accent-emerald);">₦0.00</div>
+                  <div class="card-subtitle">SMS Revenue (₦10/Alert)</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalCost" style="color: #f87171;">₦0.00</div>
+                  <div class="card-subtitle">Strowallet Cost (₦6/Alert)</div>
+                </div>
+                <div class="card-icon-badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">
+                  <i class="fa-solid fa-file-invoice-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalProfit" style="color: #60a5fa;">₦0.00</div>
+                  <div class="card-subtitle">Gross Profit (₦4/Alert)</div>
+                </div>
+                <div class="card-icon-badge purple">
+                  <i class="fa-solid fa-chart-line"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audit Ledger Table -->
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">SMS Transaction History & Audit Ledger</h3>
+                <p class="card-subtitle">Associated customer transactions, provider responses, and fee records</p>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ref / Alert ID</th>
+                    <th>User / Phone</th>
+                    <th>Alert Type</th>
+                    <th>Tx Amount</th>
+                    <th>Applicable Balance</th>
+                    <th>Customer Charge</th>
+                    <th>Provider Cost</th>
+                    <th>STRICTWALLET Profit</th>
+                    <th>Status</th>
+                    <th>Date & Time</th>
+                  </tr>
+                </thead>
+                <tbody id="admSmsTableBody">
+                  <tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);">Loading SMS alert records...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -883,6 +1228,6 @@
   </div>
 
   <!-- Admin JavaScript Logic -->
-  <script src="admin.js"></script>
+  <script src="/admin.js"></script>
 </body>
 </html>

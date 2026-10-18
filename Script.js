@@ -16,11 +16,30 @@ const State = {
   selectedPlan: null,
   pendingPurchase: null, // { type: 'airtime'|'data', payload: {} }
   balanceHidden: localStorage.getItem('strictwallet_hide_balance') === 'true',
-  activeChatTicketId: null
+  activeChatTicketId: null,
+  eventsList: [],
+  selectedEvent: null,
+  selectedTicketType: null,
+  activeAttendeesData: null,
+  strowalletBanks: [],
+  html5QrScanner: null,
+  organizerWalletBalance: 0,
+  organizerWithdrawals: [],
+  currentCreatorReceiptWithdrawal: null
 };
 
-// API Base URL
-const API_BASE = 'https://datapay.onrender.com/api';
+// API Base URL (Relative /api for local development & same-origin production)
+const API_BASE = '/api';
+
+
+
+// HTML Escape Utility
+function escapeHTML(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
 
 // Toast Notification Manager
 function showToast(message, type = 'info') {
@@ -130,6 +149,15 @@ function openModal(modalId) {
 function closeModal(modalId) {
   const modal = document.getElementById(modalId);
   if (modal) modal.classList.remove('active');
+  if (modalId === 'eventDetailsModal' || modalId === 'eventNotFoundModal') {
+    if (window.location.pathname.startsWith('/events/') || window.location.pathname.startsWith('/event/')) {
+      window.history.pushState({}, '', '/');
+    }
+  }
+}
+
+function closeEventDetailsModal() {
+  closeModal('eventDetailsModal');
 }
 
 // Navigation View Controller
@@ -156,6 +184,7 @@ function navigateToView(viewId) {
     viewAirtime: 'Buy Airtime',
     viewData: 'Buy Data Bundles',
     viewTransactions: 'Transaction Ledger',
+    viewEvents: 'Events Marketplace & Tickets',
     viewSupport: 'Customer Care Help Desk',
     viewSettings: 'Account Settings'
   };
@@ -164,6 +193,11 @@ function navigateToView(viewId) {
   // Load specific data on navigation
   if (viewId === 'viewTransactions') loadAllTransactions();
   if (viewId === 'viewSupport') loadUserTickets();
+  if (viewId === 'viewEvents') loadMarketplaceEvents();
+  if (viewId === 'viewSettings') {
+    loadOrganizerWallet();
+    renderSettingsNameUpdateUI();
+  }
   if (viewId === 'viewData') {
     renderPlanCategories();
     renderDataPlans();
@@ -197,7 +231,7 @@ async function authFetch(endpoint, options = {}) {
     const data = await res.json();
 
     if (res.status === 401 || res.status === 403) {
-      if (data.message && (data.message.includes('expired') || data.message.includes('required') || data.message.includes('Invalid'))) {
+      if (endpoint !== '/auth/login' && endpoint !== '/auth/register' && data.message && (data.message.includes('expired') || data.message.includes('required') || data.message.includes('Invalid') || data.message.includes('denied'))) {
         logoutUser(false);
         showToast('Your session has expired. Please sign in.', 'warning');
       }
@@ -254,15 +288,231 @@ async function verifyBankAccount() {
   }
 }
 
+// -------------------------------------------------------------
+// SHARED LINK PARSER & PENDING TARGET PERSISTENCE
+// -------------------------------------------------------------
+function getSharedTargetFromUrl() {
+  const path = window.location.pathname || '';
+  const searchParams = new URLSearchParams(window.location.search);
+  let target = null;
+
+  let decodedPath = path;
+  try {
+    decodedPath = decodeURIComponent(path).trim();
+  } catch (e) {
+    decodedPath = path.trim();
+  }
+
+  // Support /events/:slug and /event/:slug (dynamic for any valid slug or ID)
+  const eventMatch = decodedPath.match(/^\/(?:events|event)\/([^/?#]+)/i);
+  if (eventMatch && eventMatch[1]) {
+    const rawSlug = eventMatch[1].trim();
+    if (rawSlug) {
+      target = { type: 'event', id: rawSlug };
+    }
+  }
+
+  // Support /tickets/:ticketId and /ticket/:ticketId
+  const ticketMatch = decodedPath.match(/^\/(?:tickets|ticket)\/([^/?#]+)/i);
+  if (ticketMatch && ticketMatch[1]) {
+    const rawTicket = ticketMatch[1].trim();
+    if (rawTicket) {
+      target = { type: 'ticket', id: rawTicket };
+    }
+  }
+
+  // Fallback query parameters (?event=slug or ?ticket=id or ?slug= or ?id=)
+  if (!target) {
+    if (searchParams.get('event')) {
+      target = { type: 'event', id: searchParams.get('event').trim() };
+    } else if (searchParams.get('ticket')) {
+      target = { type: 'ticket', id: searchParams.get('ticket').trim() };
+    } else if (searchParams.get('slug')) {
+      target = { type: 'event', id: searchParams.get('slug').trim() };
+    } else if (searchParams.get('eventId')) {
+      target = { type: 'event', id: searchParams.get('eventId').trim() };
+    } else if (searchParams.get('id') && !searchParams.get('airtime')) {
+      target = { type: 'event', id: searchParams.get('id').trim() };
+    }
+  }
+
+  if (target) {
+    if (searchParams.get('ticketType')) {
+      target.ticketTypeId = searchParams.get('ticketType').trim();
+    }
+    if (searchParams.get('holder')) {
+      target.ticketHolder = searchParams.get('holder').trim();
+    }
+  }
+
+  return target;
+}
+
+function savePendingReturnTarget(target) {
+  if (!target) return;
+  try {
+    sessionStorage.setItem('strictwallet_pending_target', JSON.stringify(target));
+  } catch (e) {}
+}
+
+function getPendingReturnTarget() {
+  try {
+    const raw = sessionStorage.getItem('strictwallet_pending_target');
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+
+  const legacySlug = sessionStorage.getItem('strictwallet_return_event');
+  if (legacySlug) {
+    return {
+      type: 'event',
+      id: legacySlug,
+      ticketTypeId: sessionStorage.getItem('strictwallet_return_ticket_type') || null,
+      ticketHolder: sessionStorage.getItem('strictwallet_return_ticket_holder') || null
+    };
+  }
+  return null;
+}
+
+function clearPendingReturnTarget() {
+  try {
+    sessionStorage.removeItem('strictwallet_pending_target');
+    sessionStorage.removeItem('strictwallet_return_event');
+    sessionStorage.removeItem('strictwallet_return_ticket_type');
+    sessionStorage.removeItem('strictwallet_return_ticket_holder');
+  } catch (e) {}
+}
+
+async function renderSharedInvitationBanner(target) {
+  if (!target) return;
+  const loginBanner = document.getElementById('authSharedBanner');
+  const regBanner = document.getElementById('regSharedBanner');
+  if (!loginBanner && !regBanner) return;
+
+  try {
+    let title = 'STRICTWALLET Event';
+    let subtitle = 'Sign in or create an account to view and purchase tickets.';
+    let actionBtnHtml = '';
+
+    if (target.type === 'event') {
+      const cleanId = (target.id || '').toString().trim();
+      let ev = null;
+      const primaryEndpoint = cleanId.startsWith('EVT-')
+        ? `/events/${encodeURIComponent(cleanId)}`
+        : `/events/slug/${encodeURIComponent(cleanId)}`;
+      let res = await authFetch(primaryEndpoint);
+      if (res.ok && res.data && res.data.success && res.data.event) {
+        ev = res.data.event;
+      } else {
+        const fallbackEndpoint = cleanId.startsWith('EVT-')
+          ? `/events/slug/${encodeURIComponent(cleanId)}`
+          : `/events/${encodeURIComponent(cleanId)}`;
+        const resFallback = await authFetch(fallbackEndpoint);
+        if (resFallback.ok && resFallback.data && resFallback.data.success && resFallback.data.event) {
+          ev = resFallback.data.event;
+        }
+      }
+
+      if (ev) {
+        title = ev.title;
+        const venuePart = ev.venue ? ` • ${ev.venue}` : '';
+        subtitle = `You've been invited to <strong>${escapeHTML(ev.title)}</strong>${venuePart}. Sign in or register to get your ticket.`;
+        actionBtnHtml = `<button type="button" class="banner-btn" onclick="openEventDetails('${ev.slug || ev.id}')"><i class="fa-solid fa-eye"></i> View Event</button>`;
+      } else {
+        if (loginBanner) loginBanner.style.display = 'none';
+        if (regBanner) regBanner.style.display = 'none';
+        return;
+      }
+    } else if (target.type === 'ticket') {
+      const { ok, data } = await authFetch(`/events/ticket-info/${target.id}`);
+      if (ok && data.success && data.event) {
+        title = data.event.title;
+        subtitle = `You've received a ticket link for <strong>${escapeHTML(data.event.title)}</strong>. Sign in or register to access this ticket.`;
+        actionBtnHtml = `<button type="button" class="banner-btn" onclick="openEventDetails('${data.event.slug || data.event.id}')"><i class="fa-solid fa-eye"></i> View Event</button>`;
+      } else {
+        if (loginBanner) loginBanner.style.display = 'none';
+        if (regBanner) regBanner.style.display = 'none';
+        return;
+      }
+    }
+
+    const bannerHtml = `
+      <div class="banner-icon"><i class="fa-solid fa-ticket"></i></div>
+      <div class="banner-content">
+        <div class="banner-title"><i class="fa-solid fa-envelope-open-text"></i> Shared Invitation: ${escapeHTML(title)}</div>
+        <div class="banner-subtitle">${subtitle}</div>
+      </div>
+      ${actionBtnHtml}
+    `;
+
+    if (loginBanner) {
+      loginBanner.innerHTML = bannerHtml;
+      loginBanner.style.display = 'flex';
+    }
+    if (regBanner) {
+      regBanner.innerHTML = bannerHtml;
+      regBanner.style.display = 'flex';
+    }
+  } catch (err) {
+    console.error('Error rendering shared invitation banner:', err);
+  }
+}
+
+async function handleSharedTicket(ticketId) {
+  if (!ticketId) return;
+  try {
+    const { ok, data } = await authFetch(`/events/ticket-info/${ticketId}`);
+    if (!ok || !data.success) {
+      showToast(data.message || 'Ticket not found or inaccessible.', 'warning');
+      return;
+    }
+
+    if (data.isOwner && data.ticket) {
+      viewPersonalizedTicket(data.ticket);
+    } else if (data.event) {
+      showToast(`Viewing event for ticket: ${data.event.title}`, 'info');
+      await openEventDetails(data.event.slug || data.event.id, data.targetTicketTypeId);
+    }
+  } catch (err) {
+    console.error('Error opening shared ticket:', err);
+    showToast('Failed to load shared ticket.', 'error');
+  }
+}
+
+// -------------------------------------------------------------
 // APP INITIALIZATION & AUTH CHECKS
 // -------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+  setupEventsModuleListeners();
+
+  // Check URL pathname or query for shared event or ticket link
+  const sharedTarget = getSharedTargetFromUrl() || getPendingReturnTarget();
+  if (sharedTarget) {
+    savePendingReturnTarget(sharedTarget);
+  }
 
   if (State.token) {
     await initUserSession();
+    checkForReturnedPayment();
   } else {
+    // Preserve any returned payment reference in localStorage so it can be verified upon login
+    const urlParams = new URLSearchParams(window.location.search);
+    const refFromUrl = urlParams.get('reference') || urlParams.get('trxref');
+    if (refFromUrl) {
+      localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+        reference: refFromUrl,
+        returnedAt: Date.now()
+      }));
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+    }
     showAuthScreen('loginCard');
+    if (sharedTarget) {
+      renderSharedInvitationBanner(sharedTarget);
+      if (sharedTarget.type === 'event') {
+        openEventDetails(sharedTarget.id, sharedTarget.ticketTypeId, false);
+      }
+    }
   }
 });
 
@@ -274,6 +524,12 @@ function showAuthScreen(cardId) {
     const el = document.getElementById(id);
     if (el) el.style.display = id === cardId ? 'block' : 'none';
   });
+
+  // Ensure shared banner is updated on card switch if target exists
+  const target = getPendingReturnTarget();
+  if (target) {
+    renderSharedInvitationBanner(target);
+  }
 }
 
 function showAppScreen() {
@@ -291,6 +547,15 @@ async function initUserSession() {
 
   if (profileRes.ok && profileRes.data.success) {
     State.user = profileRes.data.user;
+    if (State.user) {
+      if (!State.user.fullName && (State.user.firstName || State.user.lastName)) {
+        State.user.fullName = `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
+      } else if (State.user.fullName && (!State.user.firstName || !State.user.lastName)) {
+        const parts = State.user.fullName.trim().split(/\s+/);
+        if (!State.user.firstName) State.user.firstName = parts[0] || '';
+        if (!State.user.lastName) State.user.lastName = parts.slice(1).join(' ') || State.user.firstName;
+      }
+    }
     updateUserInterface();
   } else {
     logoutUser(false);
@@ -308,18 +573,52 @@ async function initUserSession() {
     renderDataPlans();
   }
 
+  // Load social media community links into dashboard
+  fetchAndRenderSocialLinks();
+
   showAppScreen();
+
+  // Automatically return to pending event or ticket if redirected during auth or funding flow
+  const pendingTarget = getPendingReturnTarget();
+  if (pendingTarget) {
+    clearPendingReturnTarget();
+    if (pendingTarget.type === 'ticket') {
+      navigateToView('viewEvents');
+      switchEventTab('my-tickets');
+      setTimeout(() => {
+        handleSharedTicket(pendingTarget.id);
+      }, 250);
+    } else {
+      navigateToView('viewEvents');
+      switchEventTab('discover');
+      setTimeout(async () => {
+        await openEventDetails(pendingTarget.id, pendingTarget.ticketTypeId, false);
+        if (pendingTarget.ticketHolder) {
+          const holderInput = document.getElementById('ticketHolderFullName');
+          if (holderInput) holderInput.value = pendingTarget.ticketHolder;
+        }
+        if (pendingTarget.returnToPurchase) {
+          initiateTicketPurchase();
+        }
+      }, 250);
+    }
+  } else if (window.location.pathname === '/events' || window.location.pathname === '/events/') {
+    navigateToView('viewEvents');
+    switchEventTab('discover');
+  }
 }
 
 function updateUserInterface() {
   if (!State.user) return;
   
-  document.getElementById('sidebarUserName').innerText = State.user.fullName;
+  const displayName = State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim() || 'STRICTWALLET User';
+  document.getElementById('sidebarUserName').innerText = displayName;
   document.getElementById('sidebarUserEmail').innerText = State.user.email;
-  document.getElementById('sidebarUserAvatar').innerText = State.user.fullName.charAt(0).toUpperCase();
+  document.getElementById('sidebarUserAvatar').innerText = displayName.charAt(0).toUpperCase() || 'U';
 
   // Settings view inputs
-  document.getElementById('setFullName').value = State.user.fullName;
+  const setFullNameEl = document.getElementById('setFullName');
+  if (setFullNameEl) setFullNameEl.value = displayName;
   document.getElementById('setEmail').value = State.user.email;
   document.getElementById('setPhone').value = State.user.phone;
   document.getElementById('setNextOfKin').value = State.user.nextOfKin || 'N/A';
@@ -328,6 +627,63 @@ function updateUserInterface() {
   const currentPinGroup = document.getElementById('currentPinGroup');
   if (currentPinGroup) {
     currentPinGroup.style.display = State.user.hasPin ? 'block' : 'none';
+  }
+
+  // Update Settings Old User Name Update & Virtual Account UI
+  renderSettingsNameUpdateUI();
+}
+
+// Fetch admin-configured social media links and render them into the user-facing grid
+async function fetchAndRenderSocialLinks() {
+  const container = document.getElementById('userSocialLinksContainer');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/settings/social-links`);
+    const json = await res.json();
+
+    if (!json.success || !Array.isArray(json.links) || json.links.length === 0) {
+      container.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">No social channels configured yet.</p>';
+      return;
+    }
+
+    // Platform-specific brand colours for the icon boxes
+    const brandColors = {
+      'whatsapp': '#25D366',
+      'telegram': '#2AABEE',
+      'x/twitter': '#000000',
+      'twitter': '#1DA1F2',
+      'instagram': '#E4405F',
+      'facebook': '#1877F2',
+      'youtube': '#FF0000',
+      'tiktok': '#010101',
+      'linkedin': '#0A66C2',
+      'discord': '#5865F2',
+      'snapchat': '#FFFC00',
+      'threads': '#000000'
+    };
+
+    container.innerHTML = json.links.map(link => {
+      const platformKey = (link.platform || '').toLowerCase();
+      const bgColor = brandColors[platformKey] || 'var(--accent-emerald)';
+      const iconClass = link.icon || 'fa-solid fa-link';
+      const actionText = link.actionText || 'Open';
+
+      return `
+        <a href="${escapeHTML(link.url)}" target="_blank" rel="noopener noreferrer" class="social-link-card">
+          <div class="social-link-icon-box" style="background: ${bgColor}; color: #fff;">
+            <i class="${escapeHTML(iconClass)}"></i>
+          </div>
+          <div class="social-link-info">
+            <div class="social-link-title">${escapeHTML(link.name || link.platform)}</div>
+            <div class="social-link-action">${escapeHTML(actionText)} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i></div>
+          </div>
+        </a>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('Failed to load social links:', err);
+    container.innerHTML = '<p style="color: var(--text-secondary); padding: 16px; text-align: center;">Could not load social channels.</p>';
   }
 }
 
@@ -338,7 +694,8 @@ function renderWalletOverview(overviewData) {
   // Format Balances
   updateBalanceDisplay();
 
-  // Virtual account removed.
+  // Render Sterling Bank Virtual Account Card
+  renderSterlingAccount(w);
 
   // Statistics
   document.getElementById('statTotalDeposits').innerText = formatNaira(w.totalDeposited);
@@ -349,20 +706,541 @@ function renderWalletOverview(overviewData) {
   renderRecentTransactions(overviewData.recentTransactions || []);
 }
 
+// Render Sterling Bank Virtual Account details or generate button
+function renderSterlingAccount(wallet) {
+  const notGenEl = document.getElementById('sterlingAccountNotGenerated');
+  const activeEl = document.getElementById('sterlingAccountActive');
+  const bankNameEl = document.getElementById('sterlingBankNameDisplay');
+  const accNumEl = document.getElementById('sterlingAccountNumberDisplay');
+  const accNameEl = document.getElementById('sterlingAccountNameDisplay');
+  const errEl = document.getElementById('generateAccountErrorMsg');
+
+  if (!notGenEl || !activeEl) return;
+
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.innerText = '';
+  }
+
+  const virtualAcc = (wallet && wallet.virtualAccountNumber) || (State.user && State.user.virtualAccountNumber);
+
+  if (virtualAcc) {
+    // Virtual account exists: Display details, hide generation button
+    notGenEl.style.display = 'none';
+    activeEl.style.display = 'flex';
+
+    if (bankNameEl) bankNameEl.innerText = (wallet && wallet.virtualBankName) || (State.user && State.user.virtualBankName) || 'Sterling Bank';
+    if (accNumEl) accNumEl.innerText = virtualAcc;
+    if (accNameEl) accNameEl.innerText = (wallet && wallet.virtualAccountName) || (State.user && (State.user.virtualAccountName || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim())) || 'STRICTWALLET Customer';
+  } else {
+    // Virtual account not yet generated: Show generate button for authenticated user, hide details
+    notGenEl.style.display = 'flex';
+    activeEl.style.display = 'none';
+    const btn = document.getElementById('btnGenerateVirtualAccount');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+  }
+
+  // Synchronize Settings view virtual account UI as well
+  renderSettingsNameUpdateUI();
+}
+
+// Render Settings Old User Name Update UI and Virtual Account actions
+function renderSettingsNameUpdateUI() {
+  const actionContainer = document.getElementById('settingsUpdateDetailsAction');
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  const vaPrompt = document.getElementById('settingsVirtualAccountPrompt');
+  const vaDisplay = document.getElementById('settingsVirtualAccountDisplay');
+
+  if (!actionContainer) return;
+
+  const user = State.user;
+  if (!user || user.role === 'admin') {
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+    if (vaDisplay) vaDisplay.style.display = 'none';
+    return;
+  }
+
+  const virtualAcc = (State.wallet && State.wallet.virtualAccountNumber) || user.virtualAccountNumber;
+
+  // Case 1: Virtual account is already assigned
+  if (virtualAcc) {
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+    if (vaDisplay) {
+      vaDisplay.style.display = 'block';
+      const bankNameEl = document.getElementById('settingsBankNameDisplay');
+      const accNumEl = document.getElementById('settingsAccountNumberDisplay');
+      const accNameEl = document.getElementById('settingsAccountNameDisplay');
+      if (bankNameEl) bankNameEl.innerText = (State.wallet && State.wallet.virtualBankName) || user.virtualBankName || 'Sterling Bank';
+      if (accNumEl) accNumEl.innerText = virtualAcc;
+      if (accNameEl) accNameEl.innerText = (State.wallet && State.wallet.virtualAccountName) || user.virtualAccountName || user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'STRICTWALLET Customer';
+    }
+    return;
+  }
+
+  // Case 2: Virtual account not yet generated
+  if (vaDisplay) vaDisplay.style.display = 'none';
+
+  // Eligibility: Old users whose names are still in old Full Name format and need separate First & Last Name
+  const isEligibleOldUser = Boolean(
+    (user.needsNameUpdate === true || (!user.nameDetailsUpdated && !user.rawHasSeparateNames)) &&
+    user.nameDetailsUpdated !== true
+  );
+
+  if (isEligibleOldUser) {
+    // Show Update Details button directly below account information
+    actionContainer.style.display = 'block';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+  } else {
+    // User already completed name update or registered as a new user
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+
+    // Allow old users (and new users without VA) to generate a virtual account number
+    if (vaPrompt) {
+      vaPrompt.style.display = 'block';
+      const promptBtn = document.getElementById('btnSettingsGenerateVirtualAccount');
+      if (promptBtn) {
+        promptBtn.disabled = false;
+        promptBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+    }
+  }
+}
+
+// Open the Update Details Form for eligible old users
+function openUpdateDetailsForm() {
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  if (!formContainer) return;
+
+  formContainer.style.display = 'block';
+
+  // Clear previous errors
+  const fnInput = document.getElementById('updateFirstName');
+  const lnInput = document.getElementById('updateLastName');
+  const fnErr = document.getElementById('updateFirstNameError');
+  const lnErr = document.getElementById('updateLastNameError');
+  const globalErr = document.getElementById('updateNameGlobalError');
+
+  if (fnErr) { fnErr.style.display = 'none'; fnErr.innerText = ''; }
+  if (lnErr) { lnErr.style.display = 'none'; lnErr.innerText = ''; }
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+
+  if (fnInput && !fnInput.value && State.user) {
+    fnInput.value = State.user.firstName || (State.user.fullName ? State.user.fullName.split(' ')[0] : '');
+  }
+  if (lnInput && !lnInput.value && State.user) {
+    lnInput.value = State.user.lastName || (State.user.fullName ? State.user.fullName.split(' ').slice(1).join(' ') : '');
+  }
+
+  if (fnInput) fnInput.focus();
+}
+
+// Cancel updating details
+function cancelUpdateDetailsForm() {
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  if (formContainer) formContainer.style.display = 'none';
+  const globalErr = document.getElementById('updateNameGlobalError');
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+}
+
+// Submit First Name and Last Name update
+async function submitUpdateNameDetails(event) {
+  if (event) event.preventDefault();
+
+  const fnInput = document.getElementById('updateFirstName');
+  const lnInput = document.getElementById('updateLastName');
+  const fnErr = document.getElementById('updateFirstNameError');
+  const lnErr = document.getElementById('updateLastNameError');
+  const globalErr = document.getElementById('updateNameGlobalError');
+  const saveBtn = document.getElementById('btnSaveNameDetails');
+
+  if (fnErr) { fnErr.style.display = 'none'; fnErr.innerText = ''; }
+  if (lnErr) { lnErr.style.display = 'none'; lnErr.innerText = ''; }
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+
+  const firstName = (fnInput?.value || '').trim();
+  const lastName = (lnInput?.value || '').trim();
+
+  let hasError = false;
+
+  // Validation: reject empty or whitespace-only values
+  if (!firstName) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name is required and cannot be empty or whitespace only.';
+      fnErr.style.display = 'block';
+    }
+    if (fnInput) fnInput.focus();
+    hasError = true;
+  } else if (firstName.length < 2) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name must be at least 2 characters.';
+      fnErr.style.display = 'block';
+    }
+    if (fnInput) fnInput.focus();
+    hasError = true;
+  }
+
+  if (!lastName) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name is required and cannot be empty or whitespace only.';
+      lnErr.style.display = 'block';
+    }
+    if (!hasError && lnInput) lnInput.focus();
+    hasError = true;
+  } else if (lastName.length < 2) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name must be at least 2 characters.';
+      lnErr.style.display = 'block';
+    }
+    if (!hasError && lnInput) lnInput.focus();
+    hasError = true;
+  }
+
+  const namePattern = /^[A-Za-z\s'-]+$/;
+  if (firstName && !namePattern.test(firstName)) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name can only contain letters, spaces, hyphens, and apostrophes.';
+      fnErr.style.display = 'block';
+    }
+    hasError = true;
+  }
+  if (lastName && !namePattern.test(lastName)) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name can only contain letters, spaces, hyphens, and apostrophes.';
+      lnErr.style.display = 'block';
+    }
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+  }
+
+  try {
+    const { ok, data } = await authFetch('/auth/update-name', {
+      method: 'POST',
+      body: JSON.stringify({ firstName, lastName })
+    });
+
+    if (ok && data.success && data.user) {
+      // Update client-side user state
+      State.user.firstName = data.user.firstName;
+      State.user.lastName = data.user.lastName;
+      State.user.fullName = data.user.fullName;
+      State.user.needsNameUpdate = false;
+      State.user.nameDetailsUpdated = true;
+      State.user.rawHasSeparateNames = true;
+
+      // Refresh displayed account details
+      updateUserInterface();
+
+      showToast('Name details updated successfully!', 'success');
+
+      // The button and form disappear
+      const actionContainer = document.getElementById('settingsUpdateDetailsAction');
+      const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+      if (actionContainer) actionContainer.style.display = 'none';
+      if (formContainer) formContainer.style.display = 'none';
+
+      // Provide clear action to Generate Virtual Account Number
+      const vaPrompt = document.getElementById('settingsVirtualAccountPrompt');
+      if (vaPrompt && !State.user.virtualAccountNumber) {
+        vaPrompt.style.display = 'block';
+      }
+    } else {
+      const errMsg = data?.message || 'Failed to update name details. Please try again.';
+      if (globalErr) {
+        globalErr.innerText = errMsg;
+        globalErr.style.display = 'block';
+      }
+      showToast(errMsg, 'error');
+    }
+  } catch (err) {
+    console.error('[Update Name Error]:', err);
+    const errMsg = 'Network error saving name details. Please check connection and retry.';
+    if (globalErr) {
+      globalErr.innerText = errMsg;
+      globalErr.style.display = 'block';
+    }
+    showToast(errMsg, 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Details';
+    }
+  }
+}
+
+// Settings shortcut to initiate virtual account generation
+function triggerVirtualAccountGenerationFromSettings() {
+  generateSterlingVirtualAccount();
+}
+
+// Copy Virtual Account Number in Settings
+function copySettingsVirtualAccount() {
+  const accNum = document.getElementById('settingsAccountNumberDisplay')?.innerText?.trim();
+  if (!accNum || accNum === '--') return;
+  navigator.clipboard.writeText(accNum).then(() => {
+    showToast('Virtual account number copied to clipboard!', 'success');
+  }).catch(() => {
+    showToast('Failed to copy account number.', 'warning');
+  });
+}
+
+// Generate Sterling Bank virtual account for existing users
+async function generateSterlingVirtualAccount() {
+  const btn = document.getElementById('btnGenerateVirtualAccount');
+  const settingsBtn = document.getElementById('btnSettingsGenerateVirtualAccount');
+  const errEl = document.getElementById('generateAccountErrorMsg');
+  const settingsErrEl = document.getElementById('settingsVirtualAccountErrorMsg');
+
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.innerText = '';
+  }
+  if (settingsErrEl) {
+    settingsErrEl.style.display = 'none';
+    settingsErrEl.innerText = '';
+  }
+
+  // Ensure eligible old users update their name details first
+  if (State.user && State.user.needsNameUpdate) {
+    showToast('Please update your First Name and Last Name in Settings before generating an account.', 'warning');
+    navigateToView('viewSettings');
+    openUpdateDetailsForm();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generating Account...';
+  }
+  if (settingsBtn) {
+    settingsBtn.disabled = true;
+    settingsBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generating Account...';
+  }
+
+  try {
+    const payload = {};
+    if (State.user) {
+      if (State.user.firstName) payload.firstName = State.user.firstName;
+      if (State.user.lastName) payload.lastName = State.user.lastName;
+    }
+
+    const { ok, data } = await authFetch('/wallet/virtual-account/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (ok && data.success && data.virtualAccount) {
+      const va = data.virtualAccount;
+      if (State.wallet) {
+        State.wallet.virtualAccountNumber = va.accountNumber;
+        State.wallet.virtualBankName = va.bankName || 'Sterling Bank';
+        State.wallet.virtualAccountName = va.accountName;
+      }
+      if (State.user) {
+        State.user.virtualAccountNumber = va.accountNumber;
+        State.user.virtualBankName = va.bankName || 'Sterling Bank';
+        State.user.virtualAccountName = va.accountName;
+      }
+
+      renderSterlingAccount(State.wallet);
+      renderSettingsNameUpdateUI();
+      showToast('Sterling Bank virtual account generated successfully!', 'success');
+
+      // Refresh overview from backend
+      const ovRes = await authFetch('/wallet/overview');
+      if (ovRes.ok && ovRes.data.success) {
+        renderWalletOverview(ovRes.data);
+      }
+    } else {
+      const errMsg = data?.message || 'Unable to generate Sterling Bank virtual account. Please try again.';
+      if (errEl) {
+        errEl.innerText = errMsg;
+        errEl.style.display = 'block';
+      }
+      if (settingsErrEl) {
+        settingsErrEl.innerText = errMsg;
+        settingsErrEl.style.display = 'block';
+      }
+      showToast(errMsg, 'error');
+
+      // Re-enable button so user can retry without having to repeat name-update process
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+      if (settingsBtn) {
+        settingsBtn.disabled = false;
+        settingsBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+    }
+  } catch (err) {
+    console.error('Error generating virtual account:', err);
+    const errMsg = 'Connection error. Please try again shortly.';
+    if (errEl) {
+      errEl.innerText = errMsg;
+      errEl.style.display = 'block';
+    }
+    if (settingsErrEl) {
+      settingsErrEl.innerText = errMsg;
+      settingsErrEl.style.display = 'block';
+    }
+    showToast(errMsg, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+    if (settingsBtn) {
+      settingsBtn.disabled = false;
+      settingsBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+  }
+}
+
+// Copy Sterling Bank account number with toast notification and button feedback
+function copySterlingAccountNumber() {
+  const accNumEl = document.getElementById('sterlingAccountNumberDisplay');
+  const copyText = document.getElementById('copySterlingText');
+  const copyIcon = document.getElementById('copySterlingIcon');
+
+  const accNum = accNumEl ? accNumEl.innerText.trim() : '';
+  if (!accNum || accNum === '----------') {
+    showToast('No account number to copy', 'warning');
+    return;
+  }
+
+  const handleSuccess = () => {
+    if (copyText) copyText.innerText = 'Copied!';
+    if (copyIcon) copyIcon.className = 'fa-solid fa-check';
+    showToast('Sterling Bank account number copied to clipboard!', 'success');
+    setTimeout(() => {
+      if (copyText) copyText.innerText = 'Copy';
+      if (copyIcon) copyIcon.className = 'fa-regular fa-copy';
+    }, 2500);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(accNum).then(handleSuccess).catch(() => {
+      fallbackCopy(accNum, handleSuccess);
+    });
+  } else {
+    fallbackCopy(accNum, handleSuccess);
+  }
+}
+
+function fallbackCopy(text, onSuccess) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    if (typeof onSuccess === 'function') onSuccess();
+    else showToast('Sterling Bank account number copied!', 'success');
+  } catch (err) {
+    showToast('Could not copy automatically. Account number: ' + text, 'info');
+  }
+  document.body.removeChild(textArea);
+}
+
 function updateBalanceDisplay() {
   const balance = State.wallet ? State.wallet.balance : 0;
   const topbarEl = document.getElementById('topbarBalance');
   const dashBalEl = document.getElementById('dashboardBalanceAmount');
+  const modalMainAvailEl = document.getElementById('modalMainWalletAvail');
   const eyeIcon = document.getElementById('eyeIcon');
 
   if (State.balanceHidden) {
-    topbarEl.innerText = '₦••••••';
-    dashBalEl.innerText = '₦••••••';
+    if (topbarEl) topbarEl.innerText = '₦••••••';
+    if (dashBalEl) dashBalEl.innerText = '₦••••••';
     if (eyeIcon) eyeIcon.className = 'fa-regular fa-eye-slash';
   } else {
-    topbarEl.innerText = formatNaira(balance);
-    dashBalEl.innerText = formatNaira(balance);
+    if (topbarEl) topbarEl.innerText = formatNaira(balance);
+    if (dashBalEl) dashBalEl.innerText = formatNaira(balance);
     if (eyeIcon) eyeIcon.className = 'fa-regular fa-eye';
+  }
+
+  if (modalMainAvailEl) modalMainAvailEl.innerText = formatNaira(balance);
+
+  renderSmsAlertSettingsUI();
+}
+
+function renderSmsAlertSettingsUI() {
+  const enabled = !!(State.user?.smsAlertsEnabled || State.wallet?.smsAlertsEnabled);
+  const phone = State.user?.phone || State.wallet?.phone || '--';
+
+  const statusVal = document.getElementById('smsAlertsStatusVal');
+  if (statusVal) {
+    if (enabled) {
+      statusVal.innerText = 'ON';
+      statusVal.style.color = 'var(--accent-emerald)';
+    } else {
+      statusVal.innerText = 'OFF';
+      statusVal.style.color = '#f87171';
+    }
+  }
+
+  const btnToggle = document.getElementById('btnToggleSmsAlerts');
+  if (btnToggle) {
+    if (enabled) {
+      btnToggle.innerText = 'TURN OFF';
+      btnToggle.className = 'btn btn-secondary';
+      btnToggle.style.background = 'rgba(239, 68, 68, 0.2)';
+      btnToggle.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      btnToggle.style.color = '#f87171';
+    } else {
+      btnToggle.innerText = 'TURN ON';
+      btnToggle.className = 'btn btn-primary';
+      btnToggle.style.background = '';
+      btnToggle.style.borderColor = '';
+      btnToggle.style.color = '';
+    }
+  }
+
+  const phoneEl = document.getElementById('smsAlertsPhoneDisplay');
+  if (phoneEl) phoneEl.innerText = phone;
+}
+
+async function toggleSmsAlerts() {
+  const currentlyEnabled = !!(State.user?.smsAlertsEnabled || State.wallet?.smsAlertsEnabled);
+  const newStatus = !currentlyEnabled;
+  const btn = document.getElementById('btnToggleSmsAlerts');
+  if (btn) btn.disabled = true;
+
+  try {
+    const { ok, data } = await authFetch('/wallet/sms/settings', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: newStatus })
+    });
+
+    if (ok && data.success) {
+      if (State.user) State.user.smsAlertsEnabled = data.smsAlertsEnabled;
+      if (State.wallet) State.wallet.smsAlertsEnabled = data.smsAlertsEnabled;
+      renderSmsAlertSettingsUI();
+      showToast(data.message, 'success');
+    } else {
+      showToast(data?.message || 'Failed to update SMS alert preference.', 'error');
+    }
+  } catch (err) {
+    console.error('Error toggling SMS alerts:', err);
+    showToast('Network error updating SMS settings.', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -377,17 +1255,24 @@ function renderRecentTransactions(transactions) {
 
   tbody.innerHTML = transactions.map(tx => {
     let badgeClass = 'badge-success';
-    if (tx.status === 'Pending') badgeClass = 'badge-warning';
-    if (tx.status === 'Failed') badgeClass = 'badge-danger';
+    if (tx.status === 'Processing') badgeClass = 'badge-processing';
+    else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+    else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+    else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
 
     let typeIcon = tx.type === 'deposit' ? '<i class="fa-solid fa-arrow-down" style="color: var(--accent-emerald);"></i> Deposit' : 
                    tx.type === 'airtime' ? '<i class="fa-solid fa-mobile-screen-button" style="color: #38BDF8;"></i> Airtime' : 
                    '<i class="fa-solid fa-wifi" style="color: #8B5CF6;"></i> Data';
 
+    const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
+
     return `
-      <tr>
+      <tr ${isPending ? `style="cursor: pointer;" onclick="checkDepositStatusWithModal('${tx.providerReference || tx.id}', ${tx.amount})" title="Click to verify status"` : ''}>
         <td><strong>${typeIcon}</strong></td>
-        <td>${tx.description || tx.id}</td>
+        <td>
+          <div>${tx.description || tx.id}</div>
+          ${isPending ? `<div style="font-size: 0.75rem; color: var(--accent-blue-light);"><i class="fa-solid fa-rotate-right"></i> Click to verify payment</div>` : ''}
+        </td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: ${tx.type === 'deposit' ? 'var(--accent-emerald)' : '#FFF'};">
           ${tx.type === 'deposit' ? '+' : '-'}${formatNaira(tx.amount)}
         </td>
@@ -472,12 +1357,56 @@ function setupEventListeners() {
   // 1. REGISTRATION SUBMISSION
   document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fullName = document.getElementById('regFullName').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
-    const phone = document.getElementById('regPhone').value.trim();
-    const nextOfKin = document.getElementById('regNextOfKin').value.trim();
-    const password = document.getElementById('regPassword').value;
-    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    const firstName = document.getElementById('regFirstName')?.value.trim() || '';
+    const lastName = document.getElementById('regLastName')?.value.trim() || '';
+    const email = document.getElementById('regEmail')?.value.trim() || '';
+    const phone = document.getElementById('regPhone')?.value.trim() || '';
+    const nextOfKin = document.getElementById('regNextOfKin')?.value.trim() || '';
+    const password = document.getElementById('regPassword')?.value || '';
+    const confirmPassword = document.getElementById('regConfirmPassword')?.value || '';
+
+    // Validation
+    if (!firstName) {
+      showToast('First Name is required.', 'warning');
+      document.getElementById('regFirstName')?.focus();
+      return;
+    }
+
+    if (!lastName) {
+      showToast('Last Name is required.', 'warning');
+      document.getElementById('regLastName')?.focus();
+      return;
+    }
+
+    if (!email) {
+      showToast('Email address is required.', 'warning');
+      document.getElementById('regEmail')?.focus();
+      return;
+    }
+
+    if (!phone) {
+      showToast('Phone number is required.', 'warning');
+      document.getElementById('regPhone')?.focus();
+      return;
+    }
+
+    if (!nextOfKin) {
+      showToast('Security question (Next of Kin) is required.', 'warning');
+      document.getElementById('regNextOfKin')?.focus();
+      return;
+    }
+
+    if (!password) {
+      showToast('Password is required.', 'warning');
+      document.getElementById('regPassword')?.focus();
+      return;
+    }
+
+    if (!confirmPassword) {
+      showToast('Please confirm your password.', 'warning');
+      document.getElementById('regConfirmPassword')?.focus();
+      return;
+    }
 
     if (!checkPasswordStrength(password, '')) {
       showToast('Please ensure your password satisfies all 5 security requirements.', 'warning');
@@ -495,7 +1424,16 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ fullName, email, phone, nextOfKin, password, confirmPassword })
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        fullName: `${firstName} ${lastName}`.trim(),
+        email,
+        phone,
+        nextOfKin,
+        password,
+        confirmPassword
+      })
     });
 
     btn.disabled = false;
@@ -506,6 +1444,7 @@ function setupEventListeners() {
       localStorage.setItem('strictwallet_token', data.token);
       showToast(data.message, 'success');
       await initUserSession();
+      checkForReturnedPayment();
     } else {
       showToast(data.message || 'Registration failed. Please check your inputs.', 'error');
     }
@@ -514,7 +1453,7 @@ function setupEventListeners() {
   // 2. LOGIN SUBMISSION
   document.getElementById('loginForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('loginEmail').value.trim();
+    const identifier = document.getElementById('loginEmail').value.trim();
     const password = document.getElementById('loginPassword').value;
     const rememberMe = document.getElementById('rememberMe').checked;
 
@@ -524,7 +1463,7 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify({ email: identifier, identifier, password })
     });
 
     btn.disabled = false;
@@ -532,13 +1471,13 @@ function setupEventListeners() {
 
     if (ok && data.success) {
       State.token = data.token;
-      if (rememberMe) {
-        localStorage.setItem('strictwallet_token', data.token);
-      } else {
+      localStorage.setItem('strictwallet_token', data.token);
+      if (!rememberMe) {
         sessionStorage.setItem('strictwallet_token', data.token);
       }
       showToast(data.message, 'success');
       await initUserSession();
+      checkForReturnedPayment();
     } else {
       showToast(data.message || 'Invalid credentials.', 'error');
     }
@@ -548,7 +1487,7 @@ function setupEventListeners() {
   let recoveryResetToken = null;
   document.getElementById('recoveryVerifyForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const email = document.getElementById('recEmail').value.trim();
+    const identifier = document.getElementById('recEmail').value.trim();
     const nextOfKinAnswer = document.getElementById('recNextOfKin').value.trim();
 
     const btn = document.getElementById('recVerifyBtn');
@@ -557,7 +1496,7 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/recover-verify', {
       method: 'POST',
-      body: JSON.stringify({ email, nextOfKinAnswer })
+      body: JSON.stringify({ email: identifier, identifier, nextOfKinAnswer })
     });
 
     btn.disabled = false;
@@ -1157,23 +2096,37 @@ async function loadAllTransactions() {
   if (ok && data.success && data.transactions.length > 0) {
     tbody.innerHTML = data.transactions.map(tx => {
       let badgeClass = 'badge-success';
-      if (tx.status === 'Pending') badgeClass = 'badge-warning';
-      if (tx.status === 'Failed') badgeClass = 'badge-danger';
+      if (tx.status === 'Processing') badgeClass = 'badge-processing';
+      else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+      else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+      else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+      const ref = tx.providerReference || tx.paystackReference || tx.id;
+      const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
+      const channelDisplay = tx.type === 'deposit'
+        ? (tx.channel ? `<span style="text-transform: capitalize; color: var(--accent-blue-light);"><i class="fa-solid fa-credit-card"></i> ${tx.channel}</span>` : '<span style="color: var(--text-muted);">Paystack</span>')
+        : (tx.phoneNumber ? `<span style="font-family: var(--font-mono);">${tx.phoneNumber}</span>` : '-');
 
       return `
         <tr>
-          <td><code style="color: var(--accent-emerald); font-size: 0.8rem;">${tx.id}</code></td>
+          <td><code style="color: var(--accent-emerald); font-size: 0.8rem;" title="${ref}">${ref}</code></td>
           <td><strong style="text-transform: capitalize;">${tx.type}</strong></td>
-          <td>${tx.phoneNumber || '-'}</td>
+          <td>${channelDisplay}</td>
           <td style="font-family: var(--font-mono); font-weight: 700; color: ${tx.type === 'deposit' ? 'var(--accent-emerald)' : '#FFF'};">
             ${tx.type === 'deposit' ? '+' : '-'}${formatNaira(tx.amount)}
           </td>
           <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(tx.createdAt)}</td>
           <td><span class="badge ${badgeClass}">${tx.status}</span></td>
           <td>
-            <button class="btn btn-secondary btn-sm" onclick='showReceiptModal(${JSON.stringify(tx).replace(/'/g, "&apos;")})'>
-              <i class="fa-solid fa-receipt"></i> Receipt
-            </button>
+            ${isPending ? `
+              <button class="btn btn-primary btn-sm" onclick="checkDepositStatusWithModal('${ref}', ${tx.amount})" title="Check status with Paystack">
+                <i class="fa-solid fa-rotate-right"></i> Verify
+              </button>
+            ` : `
+              <button class="btn btn-secondary btn-sm" onclick='showReceiptModal(${JSON.stringify(tx).replace(/'/g, "&apos;")})'>
+                <i class="fa-solid fa-receipt"></i> ${tx.status === 'Successful' ? 'Receipt' : 'Details'}
+              </button>
+            `}
           </td>
         </tr>
       `;
@@ -1187,7 +2140,13 @@ function showReceiptModal(tx) {
   const body = document.getElementById('txReceiptBody');
   if (!body) return;
 
-  let badgeClass = tx.status === 'Successful' ? 'badge-success' : tx.status === 'Pending' ? 'badge-warning' : 'badge-danger';
+  let badgeClass = 'badge-success';
+  if (tx.status === 'Processing') badgeClass = 'badge-processing';
+  else if (tx.status === 'Pending') badgeClass = 'badge-warning';
+  else if (tx.status === 'Failed') badgeClass = 'badge-danger';
+  else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+  const isDeposit = tx.type === 'deposit';
 
   body.innerHTML = `
     <div style="text-align: center; margin-bottom: 20px;">
@@ -1199,16 +2158,21 @@ function showReceiptModal(tx) {
     <div style="background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; display: flex; flex-direction: column; gap: 10px; font-size: 0.88rem;">
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Transaction ID:</span>
-        <code style="color: var(--accent-emerald);">${tx.id}</code>
+        <code style="color: var(--accent-emerald); font-size: 0.82rem;">${tx.id}</code>
       </div>
       <div style="display: flex; justify-content: space-between;">
-        <span style="color: var(--text-muted);">Provider Reference:</span>
-        <span style="color: #FFF; font-family: var(--font-mono);">${tx.providerReference || '-'}</span>
+        <span style="color: var(--text-muted);">Reference:</span>
+        <span style="color: #FFF; font-family: var(--font-mono); font-size: 0.82rem;">${tx.paystackReference || tx.providerReference || tx.id}</span>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Transaction Type:</span>
         <strong style="color: #FFF; text-transform: uppercase;">${tx.type}</strong>
       </div>
+      ${isDeposit && tx.channel ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Payment Channel:</span>
+        <span style="color: #FFF; text-transform: capitalize;">${tx.channel}${tx.cardType ? ` (${tx.cardType})` : ''}${tx.bank ? ` - ${tx.bank}` : ''}</span>
+      </div>` : ''}
       ${tx.network ? `
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Network:</span>
@@ -1223,8 +2187,13 @@ function showReceiptModal(tx) {
         <span style="color: var(--text-muted);">Date & Time:</span>
         <span style="color: #FFF;">${formatDateTime(tx.createdAt)}</span>
       </div>
+      ${tx.fee && tx.fee > 0 ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Processing Fee:</span>
+        <span style="color: var(--text-muted); font-family: var(--font-mono);">${formatNaira(tx.fee)}</span>
+      </div>` : ''}
       <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 10px; font-size: 1.1rem;">
-        <span style="color: var(--text-muted);">Amount Paid:</span>
+        <span style="color: var(--text-muted);">${isDeposit ? 'Amount Credited:' : 'Amount Paid:'}</span>
         <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(tx.amount)}</strong>
       </div>
     </div>
@@ -1307,7 +2276,473 @@ function logoutUser(showNotification = true) {
   if (showNotification) showToast('You have been signed out safely.', 'info');
 }
 
-// --- PAYSTACK WALLET FUNDING ---
+// ==========================================================================
+// PAYSTACK WALLET FUNDING & RECONCILIATION LIFECYCLE
+// ==========================================================================
+
+let pendingDepositPollTimer = null;
+let currentPendingRef = null;
+let activePaymentSessionId = 0;
+
+function stopActivePaymentPolling() {
+  activePaymentSessionId++;
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+  currentPendingRef = null;
+  localStorage.removeItem('strictwallet_pending_deposit');
+  hideActivePendingBanner();
+}
+
+function showPaymentStatusModal({ status, title, description, amount, reference, allowRetry = false, allowCancel = false }) {
+  const modal = document.getElementById('paymentStatusModal');
+  const spinner = document.getElementById('paymentStatusSpinner');
+  const titleEl = document.getElementById('paymentStatusTitle');
+  const descEl = document.getElementById('paymentStatusDesc');
+  const card = document.getElementById('paymentStatusDetailsCard');
+  const amountEl = document.getElementById('psmAmount');
+  const refEl = document.getElementById('psmReference');
+  const badgeEl = document.getElementById('psmBadge');
+  const retryBtn = document.getElementById('btnPsmRetry');
+  const cancelBtn = document.getElementById('btnPsmCancel');
+
+  if (!modal) return;
+
+  if (titleEl) titleEl.innerText = title;
+  if (descEl) descEl.innerText = description;
+
+  if (card && (amount || reference)) {
+    card.style.display = 'block';
+    if (amountEl && amount) amountEl.innerText = formatNaira(amount);
+    if (refEl && reference) refEl.innerText = reference;
+  } else if (card) {
+    card.style.display = 'none';
+  }
+
+  if (badgeEl && spinner) {
+    badgeEl.className = 'badge';
+    if (status === 'Successful') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-check" style="font-size: 3.5rem; color: var(--accent-emerald);"></i>`;
+      badgeEl.classList.add('badge-success');
+      badgeEl.innerText = 'Successful';
+    } else if (status === 'Processing') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin" style="font-size: 3.5rem; color: var(--accent-blue);"></i>`;
+      badgeEl.classList.add('badge-processing');
+      badgeEl.innerText = 'Processing';
+    } else if (status === 'Pending') {
+      spinner.innerHTML = `<i class="fa-solid fa-clock-rotate-left fa-spin" style="font-size: 3.5rem; color: var(--status-warning);"></i>`;
+      badgeEl.classList.add('badge-warning');
+      badgeEl.innerText = 'Pending';
+    } else if (status === 'Cancelled') {
+      spinner.innerHTML = `<i class="fa-solid fa-circle-xmark" style="font-size: 3.5rem; color: var(--text-muted);"></i>`;
+      badgeEl.classList.add('badge-cancelled');
+      badgeEl.innerText = 'Cancelled';
+    } else { // Failed
+      spinner.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="font-size: 3.5rem; color: var(--status-error);"></i>`;
+      badgeEl.classList.add('badge-danger');
+      badgeEl.innerText = 'Failed';
+    }
+  }
+
+  if (retryBtn) retryBtn.style.display = allowRetry ? 'inline-block' : 'none';
+  if (cancelBtn) cancelBtn.style.display = allowCancel ? 'inline-block' : 'none';
+  modal.style.display = 'flex';
+}
+
+function closePaymentStatusModal() {
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+  const modal = document.getElementById('paymentStatusModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function retryCheckPendingDeposit() {
+  if (currentPendingRef) {
+    checkDepositStatusWithModal(currentPendingRef, null, 1);
+  } else {
+    closePaymentStatusModal();
+  }
+}
+
+async function cancelCurrentPendingDeposit() {
+  if (!currentPendingRef) return;
+  await cancelPendingDeposit(currentPendingRef);
+}
+
+async function cancelPendingDeposit(reference) {
+  if (!reference) return;
+
+  // Immediately clear polling timer to prevent background loop while confirming
+  if (pendingDepositPollTimer) {
+    clearTimeout(pendingDepositPollTimer);
+    pendingDepositPollTimer = null;
+  }
+
+  if (!confirm('Are you sure you want to cancel this pending payment attempt? We will verify with Paystack to make sure no payment was completed before cancelling.')) {
+    // If user decided not to cancel, re-check to resume display
+    checkDepositStatusWithModal(reference);
+    return;
+  }
+
+  // Stop polling and invalidate any in-flight checks
+  stopActivePaymentPolling();
+
+  // Show status modal indicating status check is underway
+  showPaymentStatusModal({
+    status: 'Processing',
+    title: 'Checking Payment Status...',
+    description: 'Safely verifying with Paystack to ensure no funds were deducted before cancelling...',
+    reference: reference,
+    allowRetry: false,
+    allowCancel: false
+  });
+
+  try {
+    const { ok, data } = await authFetch('/wallet/deposit/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ reference })
+    });
+
+    // Ensure polling and banners remain stopped
+    stopActivePaymentPolling();
+
+    if (ok && data.success) {
+      if (data.wasSuccessful || data.status === 'Successful') {
+        // Payment actually succeeded before cancellation! Do not cancel!
+        showPaymentStatusModal({
+          status: 'Successful',
+          title: 'Payment Successful',
+          description: data.message || 'Payment was confirmed successful and credited to your wallet.',
+          amount: data.transaction?.amount,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast(data.message || 'Payment confirmed and credited to your wallet!', 'success');
+        await initUserSession();
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+      } else {
+        // Payment was NOT received/confirmed -> successfully cancelled
+        showPaymentStatusModal({
+          status: 'Cancelled',
+          title: 'Payment Attempt Cancelled',
+          description: data.message || 'Payment attempt was cancelled. No funds were debited.',
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast('Payment attempt cancelled. No funds were debited.', 'info');
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+      }
+    } else {
+      showToast(data.message || 'Could not cancel payment session.', 'error');
+      checkActivePendingDepositFromBackend();
+    }
+  } catch (err) {
+    console.error('[Cancel Pending Error]:', err);
+    showToast('Network error while cancelling payment attempt.', 'error');
+    stopActivePaymentPolling();
+  }
+}
+
+function renderActivePendingBanner(tx) {
+  const container = document.getElementById('activePendingDepositBanner');
+  if (!container || !tx) return;
+
+  const status = (tx.status || '').toLowerCase();
+  if (status === 'cancelled' || status === 'successful' || status === 'failed') {
+    hideActivePendingBanner();
+    return;
+  }
+
+  const ref = tx.providerReference || tx.paystackReference || tx.id;
+  const amt = parseFloat(tx.amount || 0);
+
+  container.innerHTML = `
+    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: var(--radius-md); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <i class="fa-solid fa-clock-rotate-left fa-spin" style="font-size: 1.5rem; color: var(--status-warning);"></i>
+        <div>
+          <div style="font-weight: 700; color: #FFF; font-size: 0.95rem;">
+            Deposit Pending Confirmation: <span style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(amt)}</span>
+          </div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+            Reference: <code style="color: #FFF; font-size: 0.82rem;">${ref}</code> &bull; Confirming payment from bank. If you transferred, you do not need to pay again.
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" onclick="checkDepositStatusWithModal('${ref}', ${amt})" style="padding: 7px 14px;">
+          <i class="fa-solid fa-rotate-right"></i> Verify Status
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="cancelPendingDeposit('${ref}')" style="padding: 7px 12px; color: #f87171;">
+          Cancel Attempt
+        </button>
+      </div>
+    </div>
+  `;
+  container.style.display = 'block';
+}
+
+function hideActivePendingBanner() {
+  const container = document.getElementById('activePendingDepositBanner');
+  if (container) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+}
+
+async function checkActivePendingDepositFromBackend() {
+  if (!State.token) return;
+  try {
+    const { ok, data } = await authFetch('/wallet/deposit/active-pending');
+    if (ok && data.success) {
+      if (data.reconciled && data.transaction) {
+        stopActivePaymentPolling();
+        showToast(`Deposit of ${formatNaira(data.transaction.amount)} confirmed and credited!`, 'success');
+        await initUserSession();
+        loadAllTransactions();
+      } else if (data.pendingDeposit) {
+        renderActivePendingBanner(data.pendingDeposit);
+        localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+          reference: data.pendingDeposit.providerReference || data.pendingDeposit.id,
+          amount: data.pendingDeposit.amount,
+          initializedAt: new Date(data.pendingDeposit.createdAt).getTime()
+        }));
+      } else {
+        stopActivePaymentPolling();
+      }
+    }
+  } catch (err) {
+    console.warn('[Check Active Pending Error]:', err);
+  }
+}
+
+async function checkDepositStatusWithModal(reference, expectedAmount = null, attempt = 1) {
+  if (!reference) return;
+
+  if (attempt === 1) {
+    activePaymentSessionId++;
+  }
+  const thisSessionId = activePaymentSessionId;
+  currentPendingRef = reference;
+
+  showPaymentStatusModal({
+    status: attempt === 1 ? 'Processing' : 'Pending',
+    title: 'Verifying Payment...',
+    description: 'Please wait while STRICTWALLET safely confirms your transaction with Paystack.',
+    amount: expectedAmount,
+    reference: reference,
+    allowRetry: false,
+    allowCancel: false
+  });
+
+  try {
+    const { ok, data } = await authFetch(`/wallet/deposit/status/${encodeURIComponent(reference)}`);
+
+    // Invalidate if cancelled or session changed during fetch
+    if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) {
+      console.log(`[Payment Status] Status check discarded for ${reference} (session cancelled or changed).`);
+      return;
+    }
+
+    if (ok && data.success) {
+      const status = data.status;
+      const amt = data.amount || expectedAmount;
+
+      if (status === 'Successful') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Successful',
+          title: 'Payment Successful',
+          description: `₦${parseFloat(amt).toLocaleString('en-NG', { minimumFractionDigits: 2 })} credited to your wallet`,
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        showToast(`₦${parseFloat(amt).toLocaleString()} deposited successfully!`, 'success');
+        await initUserSession();
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Cancelled') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Cancelled',
+          title: 'Payment Attempt Cancelled',
+          description: data.message || 'This payment attempt was cancelled. No funds were debited.',
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Failed') {
+        stopActivePaymentPolling();
+        showPaymentStatusModal({
+          status: 'Failed',
+          title: 'Payment Failed',
+          description: data.message || 'Payment could not be completed by your bank at this time.',
+          amount: amt,
+          reference: reference,
+          allowRetry: false,
+          allowCancel: false
+        });
+        if (typeof loadAllTransactions === 'function') loadAllTransactions();
+        return;
+      }
+
+      if (status === 'Processing') {
+        renderActivePendingBanner({ amount: amt, id: reference, providerReference: reference, status: 'Processing' });
+        if (attempt < 6) {
+          pendingDepositPollTimer = setTimeout(() => {
+            if (thisSessionId === activePaymentSessionId && currentPendingRef === reference) {
+              checkDepositStatusWithModal(reference, amt, attempt + 1);
+            }
+          }, 3500);
+          return;
+        } else {
+          showPaymentStatusModal({
+            status: 'Processing',
+            title: 'Payment Processing',
+            description: 'Your payment was received and is currently being confirmed by the banking network. Your wallet will be credited automatically once confirmed. You do not need to pay again.',
+            amount: amt,
+            reference: reference,
+            allowRetry: true,
+            allowCancel: true
+          });
+          return;
+        }
+      }
+
+      if (status === 'Pending') {
+        renderActivePendingBanner({ amount: amt, id: reference, providerReference: reference, status: 'Pending' });
+        if (attempt < 5) {
+          pendingDepositPollTimer = setTimeout(() => {
+            if (thisSessionId === activePaymentSessionId && currentPendingRef === reference) {
+              checkDepositStatusWithModal(reference, amt, attempt + 1);
+            }
+          }, 4000);
+          return;
+        } else {
+          showPaymentStatusModal({
+            status: 'Pending',
+            title: 'Payment Pending',
+            description: 'If you completed the bank transfer or USSD payment, please allow a moment for bank network settlement. You do not need to pay again.',
+            amount: amt,
+            reference: reference,
+            allowRetry: true,
+            allowCancel: true
+          });
+          return;
+        }
+      }
+    } else {
+      if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) return;
+      showPaymentStatusModal({
+        status: 'Pending',
+        title: 'Payment Pending',
+        description: 'Unable to reach the payment verification server. You can check again or cancel the attempt.',
+        amount: expectedAmount,
+        reference: reference,
+        allowRetry: true,
+        allowCancel: true
+      });
+    }
+  } catch (err) {
+    if (thisSessionId !== activePaymentSessionId || currentPendingRef !== reference) return;
+    console.warn('[Payment Check Error]:', err);
+    showPaymentStatusModal({
+      status: 'Pending',
+      title: 'Payment Pending',
+      description: 'Temporary network connection issue. Your payment will be reconciled automatically once connection stabilizes.',
+      amount: expectedAmount,
+      reference: reference,
+      allowRetry: true,
+      allowCancel: true
+    });
+  }
+}
+
+function checkForReturnedPayment() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const refFromUrl = urlParams.get('reference') || urlParams.get('trxref');
+  const flow = urlParams.get('flow');
+
+  if (refFromUrl) {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+
+    localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+      reference: refFromUrl,
+      returnedAt: Date.now()
+    }));
+
+    checkDepositStatusWithModal(refFromUrl);
+    return;
+  }
+
+  // Also clear any dangling flow parameter if user returned without ref
+  if (flow === 'deposit_return') {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    window.history.replaceState({}, document.title, cleanUrl);
+  }
+
+  const storedPending = localStorage.getItem('strictwallet_pending_deposit');
+  if (storedPending) {
+    try {
+      const parsed = JSON.parse(storedPending);
+      const timeElapsed = Date.now() - (parsed.initializedAt || parsed.returnedAt || 0);
+      if (parsed.reference && timeElapsed < 24 * 60 * 60 * 1000) {
+        checkDepositStatusWithModal(parsed.reference, parsed.amount);
+      } else {
+        localStorage.removeItem('strictwallet_pending_deposit');
+      }
+    } catch (_) {
+      localStorage.removeItem('strictwallet_pending_deposit');
+    }
+  }
+
+  // Always check backend for active pending deposit
+  checkActivePendingDepositFromBackend();
+}
+
+function checkPendingDepositOnResume() {
+  const storedPending = localStorage.getItem('strictwallet_pending_deposit');
+  if (storedPending) {
+    try {
+      const parsed = JSON.parse(storedPending);
+      if (parsed.reference) {
+        checkDepositStatusWithModal(parsed.reference, parsed.amount);
+      }
+    } catch (_) {}
+  }
+
+  checkActivePendingDepositFromBackend();
+}
+
+// Lifecycle listeners for user returning from other apps / tabs
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && State && State.token) {
+    checkPendingDepositOnResume();
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (State && State.token) {
+    checkPendingDepositOnResume();
+  }
+});
+
+// --- PAYSTACK WALLET FUNDING SUBMISSION ---
 document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const amountInput = document.getElementById('depositAmount').value;
@@ -1321,17 +2756,33 @@ document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) 
   const btn = document.getElementById('btnProcessPayment');
   const originalText = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing...`;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Initializing...`;
 
   try {
+    const returnUrl = window.location.origin + window.location.pathname + '?flow=deposit_return';
     const { ok, data } = await authFetch('/wallet/deposit/initialize', {
       method: 'POST',
-      body: JSON.stringify({ amount })
+      body: JSON.stringify({ amount, callbackUrl: returnUrl })
     });
 
     if (!ok || !data.success) {
       throw new Error(data.message || 'Failed to initialize payment');
     }
+
+    // Persist pending deposit in localStorage immediately
+    localStorage.setItem('strictwallet_pending_deposit', JSON.stringify({
+      reference: data.reference,
+      amount: amount,
+      initializedAt: Date.now()
+    }));
+
+    // Render active pending banner immediately
+    renderActivePendingBanner({
+      id: data.reference,
+      providerReference: data.reference,
+      amount: amount,
+      status: 'Pending'
+    });
 
     closeModal('fundWalletModal');
     document.getElementById('fundWalletForm').reset();
@@ -1339,32 +2790,15 @@ document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) 
     const handler = PaystackPop.setup({
       key: data.publicKey,
       email: State.user.email,
-      amount: amount * 100, // kobo
+      amount: Math.round(amount * 100), // kobo
       reference: data.reference,
       currency: 'NGN',
       callback: function(response) {
-        showToast('Payment successful, verifying...', 'info');
-        // Handle async logic inside the regular function
-        (async () => {
-          try {
-            const verifyRes = await authFetch('/wallet/deposit/verify', {
-              method: 'POST',
-              body: JSON.stringify({ reference: response.reference })
-            });
-            
-            if (verifyRes.ok && verifyRes.data.success) {
-              showToast(`Successfully deposited ₦${amount.toLocaleString()}`, 'success');
-              await initUserSession(); // Refresh wallet overview
-            } else {
-              showToast(verifyRes.data?.message || 'Verification failed. Please contact support.', 'error');
-            }
-          } catch (err) {
-            showToast('An error occurred during verification.', 'error');
-          }
-        })();
+        checkDepositStatusWithModal(response.reference || data.reference, amount);
       },
       onClose: function() {
-        showToast('Payment window closed', 'info');
+        // When popup closes, check if payment actually completed (e.g. transfer completed externally)
+        checkDepositStatusWithModal(data.reference, amount);
       }
     });
 
@@ -1376,3 +2810,2641 @@ document.getElementById('fundWalletForm')?.addEventListener('submit', async (e) 
     btn.innerHTML = originalText;
   }
 });
+
+// ==========================================================================
+// STRICTWALLET EVENT TICKETING & EVENT CREATOR MODULE
+// ==========================================================================
+
+function setupEventsModuleListeners() {
+  // Live search in marketplace
+  document.getElementById('searchEventsInput')?.addEventListener('input', function(e) {
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('#eventsGridContainer .event-card').forEach(card => {
+      const text = card.innerText.toLowerCase();
+      card.style.display = text.includes(q) ? 'flex' : 'none';
+    });
+  });
+
+  // Cloudinary Banner Upload
+  document.getElementById('ceBannerFile')?.addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('ceBannerStatus');
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-emerald);"></i> Uploading banner to Cloudinary...`;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result;
+        const { ok, data } = await authFetch('/events/upload', {
+          method: 'POST',
+          body: JSON.stringify({ image: base64Data, folder: 'strictwallet_banners' })
+        });
+        if (ok && data.success) {
+          document.getElementById('ceBannerUrl').value = data.url;
+          document.getElementById('ceBannerPreview').src = data.url;
+          document.getElementById('ceBannerPreviewWrap').style.display = 'block';
+          statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Banner uploaded to Cloudinary!`;
+        } else {
+          statusEl.innerHTML = `<span style="color: var(--status-error);"><i class="fa-solid fa-circle-xmark"></i> ${data.message || 'Upload failed'}</span>`;
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color: var(--status-error);">Upload error</span>`;
+    }
+  });
+
+  // Cloudinary Ticket Design Upload
+  document.getElementById('ceDesignFile')?.addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('ceDesignStatus');
+    statusEl.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-blue-light);"></i> Uploading ticket artwork to Cloudinary...`;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64Data = reader.result;
+        const { ok, data } = await authFetch('/events/upload', {
+          method: 'POST',
+          body: JSON.stringify({ image: base64Data, folder: 'strictwallet_tickets' })
+        });
+        if (ok && data.success) {
+          document.getElementById('ceDesignUrl').value = data.url;
+          document.getElementById('ceDesignPreview').src = data.url;
+          document.getElementById('ceDesignPreviewWrap').style.display = 'block';
+          statusEl.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-emerald);"></i> Ticket artwork uploaded to Cloudinary!`;
+        } else {
+          statusEl.innerHTML = `<span style="color: var(--status-error);"><i class="fa-solid fa-circle-xmark"></i> ${data.message || 'Upload failed'}</span>`;
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      statusEl.innerHTML = `<span style="color: var(--status-error);">Upload error</span>`;
+    }
+  });
+
+  // Event Creator Withdrawal Form Submission
+  document.getElementById('eventWithdrawForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    await submitEventWithdrawal();
+  });
+}
+
+// -------------------------------------------------------------
+// 1. EVENT NAVIGATION & TABS
+// -------------------------------------------------------------
+function switchEventTab(tabName) {
+  document.getElementById('tabBtnDiscover')?.classList.toggle('active', tabName === 'discover');
+  document.getElementById('tabBtnMyEvents')?.classList.toggle('active', tabName === 'my-events');
+  document.getElementById('tabBtnMyTickets')?.classList.toggle('active', tabName === 'my-tickets');
+
+  document.getElementById('eventsTabDiscover').style.display = tabName === 'discover' ? 'block' : 'none';
+  document.getElementById('eventsTabMyEvents').style.display = tabName === 'my-events' ? 'block' : 'none';
+  document.getElementById('eventsTabMyTickets').style.display = tabName === 'my-tickets' ? 'block' : 'none';
+
+  if (tabName === 'discover') loadMarketplaceEvents();
+  if (tabName === 'my-events') loadMyOrganizedEvents();
+  if (tabName === 'my-tickets') loadMyTickets();
+}
+
+// -------------------------------------------------------------
+// 2. DISCOVER EVENTS (Marketplace Grid)
+// -------------------------------------------------------------
+async function loadMarketplaceEvents() {
+  const container = document.getElementById('eventsGridContainer');
+  const emptyState = document.getElementById('eventsEmptyState');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+      <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+      <p style="margin-top: 10px;">Loading live events marketplace...</p>
+    </div>
+  `;
+
+  try {
+    const { ok, data } = await authFetch('/events');
+    if (ok && data.success) {
+      State.eventsList = data.events || [];
+      if (State.eventsList.length === 0) {
+        container.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        container.innerHTML = State.eventsList.map(renderMarketplaceEventCard).join('');
+      }
+    } else {
+      container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--status-error); padding: 30px;">Failed to load events.</div>`;
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--status-error); padding: 30px;">Error connecting to event service.</div>`;
+  }
+}
+
+function renderMarketplaceEventCard(ev) {
+  const banner = ev.bannerUrl || 'Image.png';
+  const eventDateStr = ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'TBA';
+  const priceDisplay = ev.startingPrice > 0 ? formatNaira(ev.startingPrice) : 'Free';
+  const remainingDisplay = ev.remainingTickets > 0 ? `${ev.remainingTickets} left` : `<span style="color: var(--status-error);">Sold Out</span>`;
+
+  return `
+    <div class="event-card" id="evCard_${ev.id}">
+      <div class="event-banner-wrap">
+        <img src="${banner}" alt="${ev.title}" class="event-banner-img" onerror="this.src='Image.png'">
+        <div class="event-date-badge">
+          <i class="fa-solid fa-calendar-day"></i> ${eventDateStr}
+        </div>
+      </div>
+      <div class="event-card-content">
+        <h3 class="event-card-title">${ev.title}</h3>
+        <div class="event-card-meta">
+          <div class="event-card-meta-item">
+            <i class="fa-solid fa-location-dot"></i>
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${ev.venue}</span>
+          </div>
+          <div class="event-card-meta-item">
+            <i class="fa-solid fa-clock"></i>
+            <span>${ev.time || 'TBA'}</span>
+          </div>
+          <div class="event-card-meta-item">
+            <i class="fa-solid fa-ticket"></i>
+            <span>${remainingDisplay}</span>
+          </div>
+        </div>
+        <div class="event-card-footer">
+          <div class="event-price-tag">
+            <span class="event-price-label">Tickets from</span>
+            <span class="event-price-val">${priceDisplay}</span>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openEventDetails('${ev.slug || ev.id}')">
+            <i class="fa-solid fa-ticket"></i> View / Buy
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// -------------------------------------------------------------
+// 3. EVENT DETAILS MODAL & SLUG ROUTING
+// -------------------------------------------------------------
+async function openEventDetails(slugOrId, preselectTicketTypeId = null, updateUrl = true) {
+  const modal = document.getElementById('eventDetailsModal');
+  if (!modal) return;
+
+  const cleanId = (slugOrId || '').toString().trim();
+  if (!cleanId) return;
+
+  // Visual feedback: show loading state inside event modal immediately
+  const loadingEl = document.getElementById('edLoadingState');
+  const contentEl = document.getElementById('edContentState');
+  const footerEl = document.getElementById('edModalFooter');
+  if (loadingEl) loadingEl.style.display = 'block';
+  if (contentEl) contentEl.style.display = 'none';
+  if (footerEl) footerEl.style.display = 'none';
+  openModal('eventDetailsModal');
+
+  // Fetch complete event details with fallback between /events/:id and /events/slug/:slug
+  let ev = null;
+  const primaryEndpoint = cleanId.startsWith('EVT-')
+    ? `/events/${encodeURIComponent(cleanId)}`
+    : `/events/slug/${encodeURIComponent(cleanId)}`;
+
+  let res = await authFetch(primaryEndpoint);
+  if (res.ok && res.data && res.data.success && res.data.event) {
+    ev = res.data.event;
+  } else {
+    // Fallback: try alternate endpoint
+    const fallbackEndpoint = cleanId.startsWith('EVT-')
+      ? `/events/slug/${encodeURIComponent(cleanId)}`
+      : `/events/${encodeURIComponent(cleanId)}`;
+    const resFallback = await authFetch(fallbackEndpoint);
+    if (resFallback.ok && resFallback.data && resFallback.data.success && resFallback.data.event) {
+      ev = resFallback.data.event;
+    }
+  }
+
+  // Handle Event Not Found
+  if (!ev) {
+    closeModal('eventDetailsModal');
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (contentEl) contentEl.style.display = 'block';
+    if (footerEl) footerEl.style.display = 'flex';
+    showEventNotFound(cleanId);
+    return;
+  }
+
+  // Switch from loading to ready content
+  if (loadingEl) loadingEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = 'block';
+  if (footerEl) footerEl.style.display = 'flex';
+
+  State.selectedEvent = ev;
+  State.selectedTicketType = null;
+
+  // Populate Details
+  document.getElementById('edBannerImg').src = ev.bannerUrl || '/Image.png';
+  document.getElementById('edTitle').innerText = ev.title;
+  document.getElementById('edVenue').innerText = ev.venue;
+  
+  const dStr = ev.date ? new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'TBA';
+  document.getElementById('edDateTime').innerText = `${dStr} at ${ev.time || 'TBA'}`;
+  
+  if (ev.salesStartDate || ev.salesEndDate) {
+    document.getElementById('edSalesPeriodRow').style.display = 'flex';
+    document.getElementById('edSalesPeriod').innerText = `Sales: ${ev.salesStartDate ? formatDateTime(ev.salesStartDate) : 'Open'} - ${ev.salesEndDate ? formatDateTime(ev.salesEndDate) : 'Till Event'}`;
+  } else {
+    document.getElementById('edSalesPeriodRow').style.display = 'none';
+  }
+
+  document.getElementById('edCreatorName').innerText = ev.creatorName || 'STRICTWALLET Organizer';
+  document.getElementById('edDescription').innerText = ev.description || 'No description provided.';
+
+  // Shareable Link: generates clean URL (/event/[slug] or /event/[id])
+  const eventIdentifier = ev.slug || ev.id;
+  const shareUrl = `${window.location.origin}/event/${encodeURIComponent(eventIdentifier)}`;
+  const shareLinkText = document.getElementById('edShareLinkText');
+  if (shareLinkText) shareLinkText.innerText = shareUrl;
+
+  // Ticket Holder field defaults to logged in user's name
+  const holderInput = document.getElementById('ticketHolderFullName');
+  if (holderInput && State.user && !holderInput.value) {
+    holderInput.value = State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
+  }
+
+  // Render Available Ticket Types
+  const ttContainer = document.getElementById('edTicketTypesList');
+  ttContainer.innerHTML = '';
+
+  const ticketTypes = ev.ticketTypes || [];
+  if (ticketTypes.length === 0) {
+    ttContainer.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">No ticket categories configured.</div>`;
+  } else {
+    ticketTypes.forEach((tt, idx) => {
+      const qtyAvailable = parseInt(tt.quantityAvailable, 10) || 0;
+      const qtySold = parseInt(tt.quantitySold, 10) || 0;
+      const remaining = Math.max(0, qtyAvailable - qtySold);
+      const isSoldOut = remaining <= 0;
+
+      const isTargetType = preselectTicketTypeId && (tt.id === preselectTicketTypeId || tt.name.toLowerCase() === preselectTicketTypeId.toLowerCase());
+      const isSelected = !isSoldOut && (isTargetType || (!preselectTicketTypeId && idx === 0 && !State.selectedTicketType));
+
+      const ttCard = document.createElement('div');
+      ttCard.className = `ticket-option-card ${isSelected ? 'selected' : ''} ${isSoldOut ? 'sold-out' : ''}`;
+      ttCard.style.cssText = `
+        display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+        background: ${isSelected ? 'rgba(0, 208, 156, 0.12)' : 'rgba(13, 21, 45, 0.8)'};
+        border: 1px solid ${isSelected ? 'var(--accent-emerald)' : 'var(--border-color)'};
+        border-radius: var(--radius-md); cursor: ${isSoldOut ? 'not-allowed' : 'pointer'};
+        opacity: ${isSoldOut ? '0.5' : '1'}; transition: var(--transition);
+      `;
+
+      ttCard.innerHTML = `
+        <div>
+          <div style="font-weight: 700; color: #FFF; font-size: 0.95rem;">${tt.name}</div>
+          <div style="font-size: 0.76rem; color: var(--text-muted);">
+            ${isSoldOut ? '<span style="color: var(--status-error); font-weight: 700;">SOLD OUT</span>' : `${remaining} tickets available`}
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-size: 1.1rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">
+            ${formatNaira(tt.price)}
+          </div>
+        </div>
+      `;
+
+      if (!isSoldOut) {
+        ttCard.onclick = () => {
+          document.querySelectorAll('.ticket-option-card').forEach(c => {
+            c.style.background = 'rgba(13, 21, 45, 0.8)';
+            c.style.borderColor = 'var(--border-color)';
+          });
+          ttCard.style.background = 'rgba(0, 208, 156, 0.12)';
+          ttCard.style.borderColor = 'var(--accent-emerald)';
+          State.selectedTicketType = tt;
+          document.getElementById('edSelectedPriceDisplay').innerText = formatNaira(tt.price);
+        };
+      }
+
+      ttContainer.appendChild(ttCard);
+
+      if (isSelected) {
+        State.selectedTicketType = tt;
+        document.getElementById('edSelectedPriceDisplay').innerText = formatNaira(tt.price);
+      }
+    });
+  }
+
+  if (State.selectedTicketType) {
+    document.getElementById('edSelectedPriceDisplay').innerText = formatNaira(State.selectedTicketType.price);
+  } else {
+    document.getElementById('edSelectedPriceDisplay').innerText = '₦0.00';
+  }
+
+  // Sync browser URL bar for direct copy & share without page reload
+  if (updateUrl && (ev.slug || ev.id)) {
+    const identifier = ev.slug || ev.id;
+    const prefix = window.location.pathname.startsWith('/events') ? '/events' : '/event';
+    const targetPath = `${prefix}/${encodeURIComponent(identifier)}`;
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ modal: 'eventDetails', slug: ev.slug, id: ev.id }, ev.title, targetPath);
+    }
+  }
+}
+
+function showEventNotFound(slugOrId) {
+  const notFoundModal = document.getElementById('eventNotFoundModal');
+  const msgEl = document.getElementById('eventNotFoundSlugMsg');
+  if (msgEl) {
+    msgEl.innerHTML = `The event "<strong>${escapeHTML(slugOrId)}</strong>" does not exist, has ended, or the link may have been entered incorrectly.`;
+  }
+  if (notFoundModal) {
+    openModal('eventNotFoundModal');
+  } else {
+    showToast(`Event "${slugOrId}" not found or inactive.`, 'warning');
+  }
+}
+
+function closeEventNotFoundModal(goToHome = false) {
+  closeModal('eventNotFoundModal');
+  clearPendingReturnTarget();
+  if (goToHome) {
+    window.history.pushState({}, '', '/');
+    if (!State.token) {
+      showAuthScreen('loginCard');
+    } else {
+      navigateToView('viewDashboard');
+    }
+  }
+}
+
+function handleNotFoundExplore() {
+  closeModal('eventNotFoundModal');
+  clearPendingReturnTarget();
+  window.history.pushState({}, '', '/');
+  if (State.token) {
+    navigateToView('viewEvents');
+    switchEventTab('discover');
+  } else {
+    window.location.href = '/event-ticketing';
+  }
+}
+
+// Popstate handler for browser forward/backward navigation
+window.addEventListener('popstate', (e) => {
+  const target = getSharedTargetFromUrl();
+  if (target && target.type === 'event') {
+    openEventDetails(target.id, target.ticketTypeId, false);
+  } else {
+    closeModal('eventDetailsModal');
+    closeModal('eventNotFoundModal');
+  }
+});
+
+function copyEventShareLink() {
+  if (!State.selectedEvent) return;
+  const identifier = State.selectedEvent.slug || State.selectedEvent.id;
+  const prefix = window.location.pathname.startsWith('/events') ? '/events' : '/event';
+  const shareUrl = `${window.location.origin}${prefix}/${encodeURIComponent(identifier)}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      showToast('Event link copied to clipboard!', 'success');
+    }).catch(() => {
+      prompt('Copy shareable event URL:', shareUrl);
+    });
+  } else {
+    prompt('Copy shareable event URL:', shareUrl);
+  }
+}
+
+function copyTicketShareLink(ticketId = null) {
+  const id = ticketId || State.currentViewingTicket?.id;
+  if (!id) return;
+  const shareUrl = `${window.location.origin}/tickets/${id}`;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      showToast('Ticket link copied to clipboard!', 'success');
+    }).catch(() => {
+      prompt('Copy shareable ticket URL:', shareUrl);
+    });
+  } else {
+    prompt('Copy shareable ticket URL:', shareUrl);
+  }
+}
+
+// -------------------------------------------------------------
+// 4. CREATE / EDIT EVENT FORM LOGIC
+// -------------------------------------------------------------
+// 4. CREATE / EDIT EVENT FORM LOGIC
+// -------------------------------------------------------------
+function openCreateEventModal(eventId = null) {
+  if (!State.token || !State.user) {
+    showToast('Please sign in or register to create an event.', 'info');
+    showAuthScreen('loginCard');
+    return;
+  }
+
+  document.getElementById('editEventId').value = eventId || '';
+  document.getElementById('ceTitle').value = '';
+  document.getElementById('ceDescription').value = '';
+  document.getElementById('ceVenue').value = '';
+  document.getElementById('ceDate').value = '';
+  document.getElementById('ceTime').value = '';
+  document.getElementById('ceSalesStart').value = '';
+  document.getElementById('ceSalesEnd').value = '';
+  document.getElementById('ceBannerUrl').value = '';
+  document.getElementById('ceDesignUrl').value = '';
+  document.getElementById('ceBannerFile').value = '';
+  document.getElementById('ceDesignFile').value = '';
+  document.getElementById('ceBannerPreviewWrap').style.display = 'none';
+  document.getElementById('ceDesignPreviewWrap').style.display = 'none';
+  document.getElementById('ceBannerStatus').innerText = 'Supports JPG, PNG, WEBP';
+  document.getElementById('ceDesignStatus').innerText = 'Artwork used as ticket background';
+
+  // Reset modal title & button labels
+  const mTitle = document.querySelector('#createEventModal .card-title');
+  const mSub = document.querySelector('#createEventModal .card-subtitle');
+  const bPub = document.getElementById('btnPublishEvent');
+  const bDraft = document.getElementById('btnSaveEventDraft');
+
+  if (mTitle) mTitle.innerHTML = `<i class="fa-solid fa-calendar-plus" style="color: var(--accent-emerald);"></i> Create Event`;
+  if (mSub) mSub.innerText = 'Set up your event, upload banner & ticket artwork, and configure ticket types.';
+  if (bPub) bPub.innerHTML = `<i class="fa-solid fa-upload"></i> Publish Event`;
+  if (bDraft) bDraft.innerHTML = `<i class="fa-regular fa-file"></i> Save Draft`;
+
+  // Initialize ticket type rows
+  const container = document.getElementById('ticketTypesContainer');
+  container.innerHTML = '';
+  addTicketTypeRow('Regular', '2000', '100');
+  addTicketTypeRow('VIP', '5000', '50');
+
+  openModal('createEventModal');
+}
+
+async function openEditEventModal(eventId) {
+  if (!State.token || !State.user) {
+    showToast('Please sign in to edit your event.', 'info');
+    showAuthScreen('loginCard');
+    return;
+  }
+
+  try {
+    const { ok, data } = await authFetch(`/events/${eventId}`);
+    if (!ok || !data.success || !data.event) {
+      showToast('Failed to load event details for editing.', 'error');
+      return;
+    }
+
+    const ev = data.event;
+
+    // Security: only the creator can edit their event
+    if (ev.creatorId !== State.user.id && State.user.role !== 'admin') {
+      showToast('You can only edit events that you personally created.', 'error');
+      return;
+    }
+
+    document.getElementById('editEventId').value = ev.id;
+    document.getElementById('ceTitle').value = ev.title || '';
+    document.getElementById('ceDescription').value = ev.description || '';
+    document.getElementById('ceVenue').value = ev.venue || '';
+    document.getElementById('ceDate').value = ev.date || '';
+    document.getElementById('ceTime').value = ev.time || '';
+    document.getElementById('ceSalesStart').value = ev.salesStartDate ? ev.salesStartDate.slice(0, 16) : '';
+    document.getElementById('ceSalesEnd').value = ev.salesEndDate ? ev.salesEndDate.slice(0, 16) : '';
+    document.getElementById('ceBannerUrl').value = ev.bannerUrl || '';
+    document.getElementById('ceDesignUrl').value = ev.ticketDesignUrl || '';
+    document.getElementById('ceBannerFile').value = '';
+    document.getElementById('ceDesignFile').value = '';
+
+    const bPreview = document.getElementById('ceBannerPreview');
+    const bWrap = document.getElementById('ceBannerPreviewWrap');
+    if (ev.bannerUrl) {
+      bPreview.src = ev.bannerUrl;
+      bWrap.style.display = 'block';
+    } else {
+      bWrap.style.display = 'none';
+    }
+
+    const dPreview = document.getElementById('ceDesignPreview');
+    const dWrap = document.getElementById('ceDesignPreviewWrap');
+    if (ev.ticketDesignUrl) {
+      dPreview.src = ev.ticketDesignUrl;
+      dWrap.style.display = 'block';
+    } else {
+      dWrap.style.display = 'none';
+    }
+
+    // Populate ticket types with category IDs and sold protections
+    const container = document.getElementById('ticketTypesContainer');
+    container.innerHTML = '';
+    if (ev.ticketTypes && Array.isArray(ev.ticketTypes) && ev.ticketTypes.length > 0) {
+      ev.ticketTypes.forEach(tt => {
+        addTicketTypeRow(tt.name, tt.price, tt.quantityAvailable, tt.id, tt.quantitySold || 0);
+      });
+    } else {
+      addTicketTypeRow('Regular', '2000', '100');
+    }
+
+    // Update modal header & button labels for Edit mode
+    const mTitle = document.querySelector('#createEventModal .card-title');
+    const mSub = document.querySelector('#createEventModal .card-subtitle');
+    const bPub = document.getElementById('btnPublishEvent');
+    const bDraft = document.getElementById('btnSaveEventDraft');
+
+    if (mTitle) mTitle.innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: var(--accent-emerald);"></i> Edit Event`;
+    if (mSub) mSub.innerText = `Update event information, schedule, artwork, or ticket categories for "${ev.title}".`;
+    if (bPub) bPub.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Update & Publish`;
+    if (bDraft) bDraft.innerHTML = `<i class="fa-regular fa-file"></i> Save Draft Changes`;
+
+    openModal('createEventModal');
+  } catch (err) {
+    console.error('Edit Event Error:', err);
+    showToast('Failed to open event editor.', 'error');
+  }
+}
+
+function addTicketTypeRow(name = '', price = '', qty = '', id = '', sold = 0) {
+  const container = document.getElementById('ticketTypesContainer');
+  if (!container) return;
+
+  const rowId = `tt_row_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const row = document.createElement('div');
+  row.className = 'ticket-type-item-card';
+  row.id = rowId;
+  row.dataset.ttId = id || '';
+  row.dataset.ttSold = sold || 0;
+
+  const hasSales = parseInt(sold, 10) > 0;
+
+  row.innerHTML = `
+    <div>
+      <input type="text" class="tt-name" placeholder="Category Name (e.g. VVIP / Table for 4)" value="${name}" required style="padding: 8px 12px; font-size: 0.85rem;">
+      ${hasSales ? `<div style="font-size: 0.72rem; color: var(--accent-emerald); margin-top: 3px;"><i class="fa-solid fa-circle-check"></i> ${sold} ticket(s) sold</div>` : ''}
+    </div>
+    <div>
+      <input type="number" class="tt-price" placeholder="Price (₦)" value="${price}" min="0" required style="padding: 8px 12px; font-size: 0.85rem;">
+    </div>
+    <div>
+      <input type="number" class="tt-qty" placeholder="Quantity" value="${qty}" min="${hasSales ? sold : 1}" required style="padding: 8px 12px; font-size: 0.85rem;" title="${hasSales ? `Minimum ${sold} (already sold)` : ''}">
+    </div>
+    <div>
+      ${hasSales ? `
+        <button type="button" class="btn-remove-tt" style="opacity: 0.45; cursor: not-allowed;" title="Cannot remove category with purchased tickets" disabled>
+          <i class="fa-solid fa-lock"></i>
+        </button>
+      ` : `
+        <button type="button" class="btn-remove-tt" title="Remove Ticket Category" onclick="document.getElementById('${rowId}').remove()">
+          <i class="fa-solid fa-trash-can"></i>
+        </button>
+      `}
+    </div>
+  `;
+
+  container.appendChild(row);
+}
+
+async function saveEvent(publishNow = false) {
+  const title = document.getElementById('ceTitle').value.trim();
+  const description = document.getElementById('ceDescription').value.trim();
+  const venue = document.getElementById('ceVenue').value.trim();
+  const date = document.getElementById('ceDate').value;
+  const time = document.getElementById('ceTime').value;
+  const salesStartDate = document.getElementById('ceSalesStart').value;
+  const salesEndDate = document.getElementById('ceSalesEnd').value;
+  const bannerUrl = document.getElementById('ceBannerUrl').value;
+  const ticketDesignUrl = document.getElementById('ceDesignUrl').value;
+  const editId = document.getElementById('editEventId').value;
+
+  if (!title || !venue || !date || !time) {
+    showToast('Please fill in Event Name, Venue, Date, and Time.', 'error');
+    return;
+  }
+
+  // Gather ticket types
+  const rows = document.querySelectorAll('#ticketTypesContainer .ticket-type-item-card');
+  const ticketTypes = [];
+  rows.forEach(r => {
+    const n = r.querySelector('.tt-name').value.trim();
+    const p = parseFloat(r.querySelector('.tt-price').value);
+    const q = parseInt(r.querySelector('.tt-qty').value, 10);
+    const id = r.dataset.ttId || '';
+    const sold = parseInt(r.dataset.ttSold, 10) || 0;
+    if (n && !isNaN(p) && !isNaN(q) && q > 0) {
+      const item = {
+        name: n,
+        price: p,
+        quantityAvailable: q,
+        quantitySold: sold
+      };
+      if (id) item.id = id;
+      ticketTypes.push(item);
+    }
+  });
+
+  if (ticketTypes.length === 0) {
+    showToast('Please add at least one valid ticket category.', 'error');
+    return;
+  }
+
+  const payload = {
+    title,
+    description,
+    venue,
+    date,
+    time,
+    salesStartDate: salesStartDate || null,
+    salesEndDate: salesEndDate || null,
+    bannerUrl,
+    ticketDesignUrl,
+    ticketTypes,
+    status: publishNow ? 'published' : 'draft'
+  };
+
+  const endpoint = editId ? `/events/${editId}` : '/events';
+  const method = editId ? 'PUT' : 'POST';
+
+  const btn = publishNow ? document.getElementById('btnPublishEvent') : document.getElementById('btnSaveEventDraft');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+  }
+
+  try {
+    const { ok, data } = await authFetch(endpoint, {
+      method,
+      body: JSON.stringify(payload)
+    });
+
+    if (ok && data.success) {
+      showToast(data.message || (editId ? 'Event updated successfully!' : 'Event saved successfully!'), 'success');
+      closeModal('createEventModal');
+      switchEventTab('my-events');
+      loadMyOrganizedEvents();
+      loadMarketplaceEvents();
+    } else {
+      showToast(data.message || 'Failed to save event.', 'error');
+    }
+  } catch (err) {
+    showToast('Server error while saving event.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      const isEditing = !!editId;
+      btn.innerHTML = publishNow
+        ? (isEditing ? `<i class="fa-solid fa-floppy-disk"></i> Update & Publish` : `<i class="fa-solid fa-upload"></i> Publish Event`)
+        : (isEditing ? `<i class="fa-regular fa-file"></i> Save Draft Changes` : `<i class="fa-regular fa-file"></i> Save Draft`);
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// 5. TICKET PURCHASE WITH STRICTWALLET WALLET DEDUCTION
+// -------------------------------------------------------------
+// 5. TICKET PURCHASE AUTHORIZATION FLOW
+// -------------------------------------------------------------
+function initiateTicketPurchase() {
+  if (!State.selectedEvent) return;
+
+  // Require login before purchase; preserve all selected context
+  if (!State.token || !State.user) {
+    savePendingReturnTarget({
+      type: 'event',
+      id: State.selectedEvent.slug || State.selectedEvent.id,
+      ticketTypeId: State.selectedTicketType ? State.selectedTicketType.id : null,
+      ticketHolder: document.getElementById('ticketHolderFullName')?.value.trim() || '',
+      returnToPurchase: true
+    });
+    closeModal('eventDetailsModal');
+    showAuthScreen('loginCard');
+    renderSharedInvitationBanner({ type: 'event', id: State.selectedEvent.slug });
+    showToast('Please sign in or create an account to complete your ticket purchase.', 'info');
+    return;
+  }
+
+  if (!State.selectedTicketType) {
+    showToast('Please select a ticket category to purchase.', 'warning');
+    return;
+  }
+
+  // Populate purchase authorization PIN modal
+  const holderInputVal = document.getElementById('ticketHolderFullName').value.trim();
+  const ticketHolder = holderInputVal || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
+
+  document.getElementById('purModalEventTitle').innerText = State.selectedEvent.title;
+  document.getElementById('purModalTicketType').innerText = State.selectedTicketType.name;
+  document.getElementById('purModalTicketHolder').innerText = ticketHolder;
+  document.getElementById('purModalAmount').innerText = formatNaira(State.selectedTicketType.price);
+  
+  const balance = parseFloat(State.wallet?.balance || 0);
+  const ticketPrice = parseFloat(State.selectedTicketType.price || 0);
+  document.getElementById('purModalWalletBalance').innerText = formatNaira(balance);
+
+  // Insufficient Balance Check & Option to Fund
+  const alertBox = document.getElementById('purModalInsufficientAlert');
+  const shortageText = document.getElementById('purModalShortageText');
+  const pinGroup = document.getElementById('purModalPinGroup');
+  const confirmBtn = document.getElementById('btnConfirmEventPurchase');
+
+  if (balance < ticketPrice) {
+    const shortage = Math.max(0, ticketPrice - balance);
+    if (shortageText) {
+      shortageText.innerHTML = `Your wallet balance is <strong>${formatNaira(balance)}</strong>, which is insufficient for this <strong>${formatNaira(ticketPrice)}</strong> ticket (short by <strong>${formatNaira(shortage)}</strong>). Please fund your wallet to continue.`;
+    }
+    if (alertBox) alertBox.style.display = 'block';
+    if (pinGroup) pinGroup.style.display = 'none';
+    if (confirmBtn) confirmBtn.style.display = 'none';
+  } else {
+    if (alertBox) alertBox.style.display = 'none';
+    if (pinGroup) pinGroup.style.display = 'block';
+    if (confirmBtn) confirmBtn.style.display = 'inline-flex';
+    document.getElementById('eventPurchasePin').value = '';
+  }
+
+  openModal('eventPurchasePinModal');
+}
+
+function openFundWalletFromTicketPurchase() {
+  if (!State.selectedEvent || !State.selectedTicketType) return;
+  
+  const balance = parseFloat(State.wallet?.balance || 0);
+  const ticketPrice = parseFloat(State.selectedTicketType.price || 0);
+  const shortage = Math.max(100, Math.ceil(ticketPrice - balance));
+  const holderInputVal = document.getElementById('ticketHolderFullName')?.value.trim();
+
+  // Save current purchase state so user is returned right back after funding
+  savePendingReturnTarget({
+    type: 'event',
+    id: State.selectedEvent.slug || State.selectedEvent.id,
+    ticketTypeId: State.selectedTicketType.id,
+    ticketHolder: holderInputVal || (State.user ? (State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim()) : ''),
+    returnToPurchase: true
+  });
+
+  closeModal('eventPurchasePinModal');
+  closeModal('eventDetailsModal');
+
+  // Pre-fill deposit amount input
+  const depositInput = document.getElementById('depositAmount');
+  if (depositInput) {
+    depositInput.value = shortage;
+  }
+  const simInput = document.getElementById('simFundAmount');
+  if (simInput) {
+    simInput.value = shortage;
+  }
+
+  openModal('fundWalletModal');
+  showToast(`Please fund ${formatNaira(shortage)} to complete your ticket purchase.`, 'info');
+}
+
+async function executeEventTicketPurchase() {
+  if (!State.selectedEvent || !State.selectedTicketType) return;
+
+  const pin = document.getElementById('eventPurchasePin').value;
+  if (!pin || pin.length !== 4) {
+    showToast('Please enter your 4-digit Transaction PIN.', 'error');
+    return;
+  }
+
+  const holderInputVal = document.getElementById('ticketHolderFullName').value.trim();
+  const ticketHolderName = holderInputVal || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
+
+  const btn = document.getElementById('btnConfirmEventPurchase');
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Authorizing...`;
+
+  try {
+    const { ok, data } = await authFetch(`/events/${State.selectedEvent.id}/purchase`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ticketTypeId: State.selectedTicketType.id,
+        ticketHolderName: ticketHolderName,
+        pin: pin
+      })
+    });
+
+    if (ok && data.success) {
+      closeModal('eventPurchasePinModal');
+      closeModal('eventDetailsModal');
+      clearPendingReturnTarget();
+
+      // Refresh wallet & overview
+      await initUserSession();
+
+      State.lastPurchasedTicket = data.ticket;
+      renderPaymentReceipt(data.receipt, data.ticket);
+      openModal('eventReceiptModal');
+      showToast('Ticket purchased successfully!', 'success');
+    } else {
+      if (data.message && data.message.toLowerCase().includes('insufficient wallet balance')) {
+        const alertBox = document.getElementById('purModalInsufficientAlert');
+        const shortageText = document.getElementById('purModalShortageText');
+        const pinGroup = document.getElementById('purModalPinGroup');
+        const confirmBtn = document.getElementById('btnConfirmEventPurchase');
+        const balance = parseFloat(State.wallet?.balance || 0);
+        const ticketPrice = parseFloat(State.selectedTicketType.price || 0);
+        const shortage = Math.max(0, ticketPrice - balance);
+
+        if (shortageText) {
+          shortageText.innerHTML = `Your wallet balance is <strong>${formatNaira(balance)}</strong>, which is insufficient for this <strong>${formatNaira(ticketPrice)}</strong> ticket (short by <strong>${formatNaira(shortage)}</strong>). Please fund your wallet to continue.`;
+        }
+        if (alertBox) alertBox.style.display = 'block';
+        if (pinGroup) pinGroup.style.display = 'none';
+        if (confirmBtn) confirmBtn.style.display = 'none';
+      }
+      showToast(data.message || 'Payment authorization failed.', 'error');
+    }
+  } catch (err) {
+    showToast('Error completing ticket purchase.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-check"></i> Authorize & Pay`;
+  }
+}
+
+// -------------------------------------------------------------
+// 6. PAYMENT RECEIPT RENDERING
+// -------------------------------------------------------------
+function renderPaymentReceipt(receipt, ticket) {
+  const container = document.getElementById('eventReceiptBody');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="text-align: center; margin-bottom: 16px;">
+      <div style="font-size: 1.3rem; font-weight: 800; letter-spacing: 0.05em; color: var(--accent-emerald);">STRICTWALLET</div>
+      <div style="font-size: 0.85rem; color: var(--text-secondary); text-transform: uppercase;">Payment Receipt</div>
+    </div>
+
+    <div style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Event Name:</span>
+        <strong style="color: #FFF; font-size: 0.85rem; text-align: right;">${receipt.eventName}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Ticket Type:</span>
+        <strong style="color: var(--accent-blue-light); font-size: 0.85rem;">${receipt.ticketType}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Ticket Holder:</span>
+        <strong style="color: #FFF; font-size: 0.85rem;">${receipt.ticketHolder}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Amount:</span>
+        <strong style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.15rem;">${formatNaira(receipt.amount)}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.82rem;">Transaction ID:</span>
+        <strong style="color: #FFF; font-family: var(--font-mono); font-size: 0.8rem;">${receipt.transactionId}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.82rem;">Date:</span>
+        <span style="color: #FFF; font-size: 0.82rem;">${formatDateTime(receipt.date)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 10px;">
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Payment Status:</span>
+        <span class="badge badge-success">${receipt.status}</span>
+      </div>
+    </div>
+  `;
+}
+
+function viewPurchasedTicketFromReceipt() {
+  closeModal('eventReceiptModal');
+  if (State.lastPurchasedTicket) {
+    viewPersonalizedTicket(State.lastPurchasedTicket);
+  }
+}
+
+// -------------------------------------------------------------
+// 7. PERSONALIZED TICKET CANVAS & DOWNLOAD
+// -------------------------------------------------------------
+async function viewPersonalizedTicket(ticketOrId) {
+  let ticket = ticketOrId;
+  if (typeof ticketOrId === 'string') {
+    const { ok, data } = await authFetch(`/events/ticket-info/${ticketOrId}`);
+    if (ok && data.success) {
+      if (data.isOwner && data.ticket) {
+        ticket = data.ticket;
+      } else if (data.event) {
+        // Visitor is not the private owner of this ticket, but has access to the event & tickets
+        showToast(`Viewing event for ticket: ${data.event.title}`, 'info');
+        await openEventDetails(data.event.slug || data.event.id, data.targetTicketTypeId);
+        return;
+      }
+    } else {
+      showToast(data?.message || 'Could not load ticket details.', 'error');
+      return;
+    }
+  }
+
+  State.currentViewingTicket = ticket;
+  document.getElementById('ptTicketId').innerText = ticket.id;
+  document.getElementById('ptHolderName').innerText = ticket.ticketHolderName;
+  
+  const statusBadge = document.getElementById('ptStatusBadge');
+  if (ticket.status === 'used') {
+    statusBadge.className = 'badge badge-warning';
+    statusBadge.innerText = 'USED';
+  } else if (ticket.status === 'cancelled') {
+    statusBadge.className = 'badge badge-error';
+    statusBadge.innerText = 'CANCELLED';
+  } else {
+    statusBadge.className = 'badge badge-success';
+    statusBadge.innerText = 'VALID';
+  }
+
+  renderPersonalizedTicketCanvas(ticket);
+  openModal('personalizedTicketModal');
+}
+
+async function renderPersonalizedTicketCanvas(ticket) {
+  const canvas = document.getElementById('personalizedTicketCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Clear
+  ctx.clearRect(0, 0, W, H);
+
+  // Background artwork
+  if (ticket.ticketDesignUrl) {
+    try {
+      const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        bgImg.onload = resolve;
+        bgImg.onerror = reject;
+        bgImg.src = ticket.ticketDesignUrl;
+      });
+      ctx.drawImage(bgImg, 0, 0, W, H);
+
+      // Dark glass overlay for contrast
+      ctx.fillStyle = 'rgba(6, 11, 25, 0.72)';
+      ctx.fillRect(0, 0, W, H);
+    } catch (e) {
+      drawDefaultTicketCanvasBg(ctx, W, H);
+    }
+  } else {
+    drawDefaultTicketCanvasBg(ctx, W, H);
+  }
+
+  // Emerald Border Glow
+  ctx.strokeStyle = '#00D09C';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(10, 10, W - 20, H - 20);
+
+  // Top STRICTWALLET Brand Header
+  ctx.fillStyle = '#00D09C';
+  ctx.font = 'bold 20px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText('STRICTWALLET OFFICIAL E-TICKET', 36, 46);
+
+  // Event Name
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 28px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText((ticket.eventName || 'Event Name').substring(0, 32), 36, 92);
+
+  // Category Pill Badge (VVIP, VIP, Regular, etc.)
+  ctx.fillStyle = 'rgba(0, 208, 156, 0.2)';
+  ctx.fillRect(36, 112, 170, 34);
+  ctx.strokeStyle = '#00D09C';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(36, 112, 170, 34);
+
+  ctx.fillStyle = '#00D09C';
+  ctx.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText((ticket.ticketTypeName || 'Standard').toUpperCase(), 48, 135);
+
+  // Ticket Holder
+  ctx.fillStyle = '#94A3B8';
+  ctx.font = '14px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText('TICKET HOLDER', 36, 182);
+
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 22px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(ticket.ticketHolderName || ticket.buyerName || 'Attendee', 36, 210);
+
+  // Event Venue & Schedule
+  ctx.fillStyle = '#94A3B8';
+  ctx.font = '13px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText('DATE & TIME', 36, 252);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = 'bold 16px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText(`${ticket.eventDate || ''} • ${ticket.eventTime || ''}`, 36, 274);
+
+  ctx.fillStyle = '#94A3B8';
+  ctx.font = '13px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText('VENUE', 36, 310);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = '15px "Plus Jakarta Sans", sans-serif';
+  ctx.fillText((ticket.eventVenue || 'Venue').substring(0, 36), 36, 332);
+
+  // Ticket ID
+  ctx.fillStyle = '#64748B';
+  ctx.font = '12px "JetBrains Mono", monospace';
+  ctx.fillText(`ID: ${ticket.id}`, 36, 388);
+
+  // Generate & Draw QR Code on the right side
+  try {
+    if (window.QRCode && window.QRCode.toDataURL) {
+      const qrDataUrl = await window.QRCode.toDataURL(ticket.qrToken || ticket.id, {
+        width: 170,
+        margin: 1,
+        color: { dark: '#060B19', light: '#FFFFFF' }
+      });
+      const qrImg = new Image();
+      await new Promise(r => {
+        qrImg.onload = r;
+        qrImg.src = qrDataUrl;
+      });
+
+      // White background card for QR code
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(W - 220, 80, 180, 180);
+      ctx.drawImage(qrImg, W - 215, 85, 170, 170);
+
+      ctx.fillStyle = '#00D09C';
+      ctx.font = 'bold 12px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('SCAN FOR ENTRY', W - 130, 280);
+      ctx.textAlign = 'left';
+    }
+  } catch (err) {
+    console.error('QR Render Error:', err);
+  }
+}
+
+function drawDefaultTicketCanvasBg(ctx, W, H) {
+  const grad = ctx.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#060B19');
+  grad.addColorStop(0.5, '#0D152D');
+  grad.addColorStop(1, '#111B36');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function downloadPersonalizedTicketImage() {
+  downloadPersonalizedTicketPDF();
+}
+
+// Vector QR Code Renderer for jsPDF (guaranteed crisp scannable modules)
+function drawTicketQRCodeVector(doc, text, x, y, size) {
+  try {
+    const qrEngine = (typeof window !== 'undefined' && window.QRCode) ? window.QRCode : (typeof QRCode !== 'undefined' ? QRCode : null);
+    if (!qrEngine || !qrEngine.create) {
+      console.warn('QRCode.create not available for vector drawing');
+      return false;
+    }
+    const qr = qrEngine.create(text, { errorCorrectionLevel: 'M' });
+    if (!qr || !qr.modules) return false;
+
+    const count = qr.modules.size;
+    const margin = 1; // 1-module quiet margin inside the vector canvas
+    const totalModules = count + (margin * 2);
+    const moduleSize = size / totalModules;
+
+    // Crisp pure white quiet background
+    doc.setFillColor(255, 255, 255);
+    doc.rect(x, y, size, size, 'F');
+
+    // Black square modules (crisp, zero blur, zero distortion)
+    doc.setFillColor(0, 0, 0);
+    for (let r = 0; r < count; r++) {
+      for (let c = 0; c < count; c++) {
+        if (qr.modules.get(r, c)) {
+          doc.rect(
+            x + ((c + margin) * moduleSize),
+            y + ((r + margin) * moduleSize),
+            moduleSize,
+            moduleSize,
+            'F'
+          );
+        }
+      }
+    }
+    return true;
+  } catch (err) {
+    console.warn('Vector QR drawing failed:', err);
+    return false;
+  }
+}
+
+async function downloadPersonalizedTicketPDF(ticketObj = null) {
+  const ticket = ticketObj || State.currentViewingTicket;
+  if (!ticket) {
+    showToast('No active ticket selected.', 'warning');
+    return;
+  }
+
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    showToast('PDF engine initializing, please retry in a moment.', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('btnDownloadTicket');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF...`;
+  }
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+
+    // 1. Fetch Logo as base64
+    let logoDataUrl = null;
+    try {
+      const logoRes = await fetch('Image.png');
+      const blob = await logoRes.blob();
+      logoDataUrl = await new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn('Logo load error for PDF:', e);
+    }
+
+    // 2. Generate Sharp, Scannable QR Code DataURL
+    let qrDataUrl = null;
+    const qrText = ticket.qrToken || ticket.id;
+    try {
+      const qrEngine = (typeof window !== 'undefined' && window.QRCode) ? window.QRCode : (typeof QRCode !== 'undefined' ? QRCode : null);
+      if (qrEngine && qrEngine.toDataURL) {
+        qrDataUrl = await qrEngine.toDataURL(qrText, {
+          width: 500,
+          margin: 1,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#000000', light: '#FFFFFF' }
+        });
+      }
+    } catch (e) {
+      console.warn('QR generation error for PDF:', e);
+    }
+
+    const siteUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'https://strictwallet.com'
+      : (window.location.origin || 'https://strictwallet.com');
+    const displaySiteUrl = 'www.strictwallet.com';
+
+    // ==========================================
+    // PDF RENDERING ENGINE (Universal A4)
+    // ==========================================
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 14;
+    const contentW = pageW - (margin * 2); // 182mm
+
+    // Page soft background
+    doc.setFillColor(250, 252, 254);
+    doc.rect(0, 0, pageW, pageH, 'F');
+
+    // ------------------------------------------
+    // A. TOP BRANDING & SITE LINK HEADER
+    // ------------------------------------------
+    // Top emerald accent bar
+    doc.setFillColor(0, 208, 156); // #00D09C
+    doc.rect(0, 0, pageW, 4, 'F');
+
+    // Add Logo if available
+    let textStartX = margin;
+    if (logoDataUrl) {
+      try {
+        doc.addImage(logoDataUrl, 'JPEG', margin, 12, 20, 20);
+        textStartX = margin + 24;
+      } catch (err) {
+        textStartX = margin;
+      }
+    }
+
+    // Site Name: STRICTWALLET
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(6, 11, 25); // #060B19
+    doc.text('STRICTWALLET', textStartX, 19);
+
+    // Site Website Link
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 163, 122); // #00A37A
+    doc.text(displaySiteUrl, textStartX, 25);
+    doc.link(textStartX, 22, 36, 4, { url: siteUrl });
+
+    // Header Subtitle
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139); // #64748B
+    doc.text('Official Event Entry Pass & Secure Ticketing Gateway', textStartX, 30);
+
+    // Right Side: Valid Status Pill Badge
+    const statusText = (ticket.status || 'valid').toUpperCase();
+    const isUsed = statusText === 'USED';
+    const isCancelled = statusText === 'CANCELLED';
+
+    const badgeW = 44;
+    const badgeH = 10;
+    const badgeX = pageW - margin - badgeW;
+    const badgeY = 15;
+
+    if (isUsed) {
+      doc.setFillColor(254, 243, 199);
+      doc.setDrawColor(245, 158, 11);
+      doc.setTextColor(180, 83, 9);
+    } else if (isCancelled) {
+      doc.setFillColor(254, 226, 226);
+      doc.setDrawColor(239, 68, 68);
+      doc.setTextColor(185, 28, 28);
+    } else {
+      doc.setFillColor(236, 253, 245);
+      doc.setDrawColor(0, 208, 156);
+      doc.setTextColor(4, 120, 87);
+    }
+
+    doc.setLineWidth(0.4);
+    doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 2.5, 2.5, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.text(`STATUS: ${statusText}`, badgeX + (badgeW / 2), badgeY + 6.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('SECURE QR ENCRYPTED', pageW - margin, 30, { align: 'right' });
+
+    // ------------------------------------------
+    // B. MAIN TICKET CARD CONTAINER
+    // ------------------------------------------
+    const cardY = 38;
+    const cardH = 168;
+
+    // Card frame & background
+    doc.setDrawColor(226, 232, 240); // #E2E8F0
+    doc.setLineWidth(0.6);
+    doc.setFillColor(255, 255, 255);
+    doc.roundedRect(margin, cardY, contentW, cardH, 4, 4, 'FD');
+
+    // 1. Card Top Banner (Deep Midnight)
+    const bannerH = 38;
+    doc.setFillColor(6, 11, 25); // #060B19
+    doc.roundedRect(margin, cardY, contentW, bannerH, 4, 4, 'F');
+    doc.rect(margin, cardY + bannerH - 4, contentW, 4, 'F');
+
+    // Emerald accent line at very top of card
+    doc.setFillColor(0, 208, 156);
+    doc.roundedRect(margin, cardY, contentW, 2.5, 2, 2, 'F');
+
+    // Event Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(255, 255, 255);
+    const safeTitle = (ticket.eventName || 'Event Name').substring(0, 42);
+    doc.text(safeTitle, margin + 8, cardY + 16);
+
+    // Event Category Pill Badge inside banner
+    const catName = (ticket.ticketTypeName || 'Standard Pass').toUpperCase();
+    doc.setFillColor(0, 208, 156); // #00D09C
+    doc.roundedRect(margin + 8, cardY + 23, 44, 8, 2, 2, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(6, 11, 25);
+    doc.text(catName, margin + 30, cardY + 28.5, { align: 'center' });
+
+    // Date & Time quick summary on right of banner
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(56, 189, 248); // #38BDF8
+    doc.text(`${ticket.eventDate || ''}  •  ${ticket.eventTime || ''}`, pageW - margin - 8, cardY + 28.5, { align: 'right' });
+
+    // ------------------------------------------
+    // 2. Ticket Body: Two Column Layout
+    // ------------------------------------------
+    const bodyY = cardY + bannerH; // Y = 76
+    const stubX = margin + 118; // 132mm
+
+    // Vertical Perforation Line
+    doc.setDrawColor(203, 213, 225); // #CBD5E1
+    doc.setLineDashPattern([1.5, 2], 0);
+    doc.line(stubX, bodyY + 4, stubX, cardY + cardH - 4);
+    doc.setLineDashPattern([], 0); // reset dash
+
+    // Left Column: Attendee & Event Logistics
+    const leftX = margin + 8;
+    let curY = bodyY + 11;
+
+    // Field 1: Ticket Holder Name
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('TICKET HOLDER NAME', leftX, curY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(15, 23, 42);
+    doc.text(ticket.ticketHolderName || ticket.buyerName || 'Valued Guest', leftX, curY + 6);
+    curY += 16;
+
+    // Field 2: Purchaser / Buyer
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('PURCHASER / BUYER ACCOUNT', leftX, curY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(30, 41, 59);
+    const buyerDisplay = ticket.buyerName ? `${ticket.buyerName} (${ticket.buyerEmail || ''})` : (ticket.buyerEmail || 'STRICTWALLET Customer');
+    doc.text(buyerDisplay.substring(0, 48), leftX, curY + 4.5);
+    curY += 13;
+
+    // Field 3: Venue & Location
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('EVENT VENUE & LOCATION', leftX, curY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(15, 23, 42);
+    const venueLines = doc.splitTextToSize(ticket.eventVenue || 'Venue Announced by Organizer', 98);
+    doc.text(venueLines, leftX, curY + 5);
+    curY += (venueLines.length * 4.5) + 8;
+
+    // Field 4: Event Date & Admission Time
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('EVENT DATE & TIME', leftX, curY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text(`${ticket.eventDate || 'TBA'} at ${ticket.eventTime || 'TBA'}`, leftX, curY + 5);
+    curY += 13;
+
+    // Field 5: Admission Price / Fee
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('TICKET PRICE / ADMISSION FEE', leftX, curY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(0, 163, 122); // #00A37A
+    const priceNum = parseFloat(ticket.ticketPrice || 0);
+    const priceStr = priceNum === 0 ? 'FREE ADMISSION' : `NGN ${priceNum.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`;
+    doc.text(priceStr, leftX, curY + 5);
+    curY += 13;
+
+    // Field 6: Ticket ID & Transaction ID
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('TICKET ID & TRANSACTION REF', leftX, curY);
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(37, 99, 235); // #2563EB
+    doc.text(ticket.id, leftX, curY + 4.5);
+
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`TXN: ${ticket.transactionId || 'DIRECT-VERIFIED'}`, leftX, curY + 9);
+
+    // Right Column: Scannable QR Code Stub
+    const rightStubW = contentW - 118; // 64mm
+    const stubCenterX = stubX + (rightStubW / 2);
+
+    // Stub Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(6, 11, 25);
+    doc.text('GATE ENTRY PASS', stubCenterX, bodyY + 6.5, { align: 'center' });
+
+    // Ticket ID directly above QR code
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('TICKET ID', stubCenterX, bodyY + 12, { align: 'center' });
+
+    doc.setFont('courier', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(37, 99, 235); // #2563EB
+    doc.text(ticket.id, stubCenterX, bodyY + 16.5, { align: 'center' });
+
+    // Small Label Above QR Code: "SCAN TO VERIFY TICKET"
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 163, 122); // STRICTWALLET Emerald #00A37A
+    doc.text('SCAN TO VERIFY TICKET', stubCenterX, bodyY + 21.5, { align: 'center' });
+
+    // QR Code Container Box (White frame, high contrast, quiet zone)
+    const qrBoxW = 50;
+    const qrBoxH = 50;
+    const qrBoxX = stubX + ((rightStubW - qrBoxW) / 2);
+    const qrBoxY = bodyY + 23.5;
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(203, 213, 225); // #CBD5E1
+    doc.setLineWidth(0.4);
+    doc.roundedRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH, 2, 2, 'FD');
+
+    // Scannable Black-and-White Square QR Code Graphic (Dual Engine: PNG + Vector Fallback)
+    const qrInnerX = qrBoxX + 2.5;
+    const qrInnerY = qrBoxY + 2.5;
+    const qrInnerSize = qrBoxW - 5; // 45mm x 45mm
+
+    let qrRendered = false;
+    if (qrDataUrl) {
+      try {
+        doc.addImage(qrDataUrl, 'PNG', qrInnerX, qrInnerY, qrInnerSize, qrInnerSize);
+        qrRendered = true;
+      } catch (err) {
+        console.warn('doc.addImage failed, falling back to vector QR:', err);
+      }
+    }
+
+    if (!qrRendered) {
+      qrRendered = drawTicketQRCodeVector(doc, qrText, qrInnerX, qrInnerY, qrInnerSize);
+    }
+
+    // Label Below QR Code: "SCAN TO VERIFY TICKET"
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(0, 163, 122);
+    doc.text('SCAN TO VERIFY TICKET', stubCenterX, qrBoxY + qrBoxH + 6.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Present code to door scanner', stubCenterX, qrBoxY + qrBoxH + 10.5, { align: 'center' });
+    doc.text('Valid for 1 admission check-in', stubCenterX, qrBoxY + qrBoxH + 14.5, { align: 'center' });
+
+    // Verification token snippet
+    const tokenPreview = (ticket.qrToken || ticket.id).substring(0, 20) + '...';
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(148, 163, 184);
+    doc.text(`Token: ${tokenPreview}`, stubCenterX, qrBoxY + qrBoxH + 19.5, { align: 'center' });
+
+    // ------------------------------------------
+    // C. SECURITY STRIP & VERIFICATION GUARANTEE
+    // ------------------------------------------
+    const secY = cardY + cardH + 6;
+    doc.setFillColor(241, 245, 249); // #F1F5F9
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, secY, contentW, 11, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.2);
+    doc.setTextColor(71, 85, 105);
+    doc.text(
+      '• STRICTWALLET VERIFIED DIGITAL PASS • ADMISSION CANNOT BE DUPLICATED • ZERO-FRAUD GUARANTEE •',
+      pageW / 2,
+      secY + 7,
+      { align: 'center' }
+    );
+
+    // ------------------------------------------
+    // D. IMPORTANT ATTENDEE INSTRUCTIONS
+    // ------------------------------------------
+    const instY = secY + 18;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text('IMPORTANT ADMISSION & SCANNING INSTRUCTIONS', margin, instY);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+
+    const guidelines = [
+      '1. Digital or Printed Presentation: You can present this PDF directly on your smartphone screen or bring a printed copy.',
+      '2. Fast Gate Verification: Set your mobile screen brightness to high at the check-in point for swift barcode reader scanning.',
+      '3. One-Time Admission: Each ticket grants single entry. Once scanned at the gate, duplicate attempts will be rejected.',
+      '4. Anti-Fraud Advisory: Never share your unique QR code or ticket link on public social media to prevent ticket poaching.'
+    ];
+
+    let gY = instY + 6;
+    guidelines.forEach(line => {
+      doc.text(line, margin, gY);
+      gY += 5.2;
+    });
+
+    // ------------------------------------------
+    // E. FOOTER BRANDING & TIMESTAMP
+    // ------------------------------------------
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.line(margin, 282, pageW - margin, 282);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    const createdStr = ticket.createdAt ? new Date(ticket.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleDateString();
+    doc.text(`Issued by STRICTWALLET Ticketing Engine  •  ${createdStr}`, margin, 288);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(0, 163, 122);
+    doc.text(displaySiteUrl, pageW - margin, 288, { align: 'right' });
+    doc.link(pageW - margin - 35, 284, 35, 6, { url: siteUrl });
+
+    // Download PDF
+    const cleanFilename = `STRICTWALLET_Ticket_${ticket.id || 'Pass'}.pdf`;
+    doc.save(cleanFilename);
+    showToast('Event ticket PDF downloaded successfully!', 'success');
+
+  } catch (err) {
+    console.error('Ticket PDF Generation Error:', err);
+    showToast('Failed to generate PDF ticket. Please try again.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText || `<i class="fa-solid fa-file-pdf"></i> Download Ticket (PDF)`;
+    }
+  }
+}
+
+// -------------------------------------------------------------
+// 8. CUSTOMER "MY TICKETS"
+// -------------------------------------------------------------
+async function loadMyTickets() {
+  const container = document.getElementById('myTicketsGridContainer');
+  const emptyState = document.getElementById('myTicketsEmptyState');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+      <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+      <p style="margin-top: 10px;">Loading your purchased tickets...</p>
+    </div>
+  `;
+
+  try {
+    const { ok, data } = await authFetch('/events/user/my-tickets');
+    if (ok && data.success) {
+      const tickets = data.tickets || [];
+      if (tickets.length === 0) {
+        container.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        container.innerHTML = tickets.map(t => `
+          <div class="event-card">
+            <div class="event-banner-wrap" style="height: 130px;">
+              <img src="${t.bannerUrl || 'Image.png'}" alt="${t.eventName}" class="event-banner-img" onerror="this.src='Image.png'">
+              <div class="event-status-badge badge-${t.status === 'used' ? 'warning' : 'success'}">
+                ${t.status.toUpperCase()}
+              </div>
+            </div>
+            <div class="event-card-content">
+              <h3 class="event-card-title">${t.eventName}</h3>
+              <div class="event-card-meta">
+                <div class="event-card-meta-item">
+                  <i class="fa-solid fa-ticket"></i>
+                  <strong style="color: var(--accent-emerald);">${t.ticketTypeName}</strong>
+                </div>
+                <div class="event-card-meta-item">
+                  <i class="fa-solid fa-user"></i>
+                  <span>Holder: <strong>${t.ticketHolderName}</strong></span>
+                </div>
+                <div class="event-card-meta-item">
+                  <i class="fa-solid fa-barcode"></i>
+                  <span style="font-family: var(--font-mono); font-size: 0.75rem;">${t.id}</span>
+                </div>
+              </div>
+              <div class="event-card-footer" style="display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <span style="font-family: var(--font-mono); font-weight: 800; color: #FFF;">${formatNaira(t.ticketPrice)}</span>
+                <div style="display: flex; gap: 6px;">
+                  <button class="btn btn-outline btn-sm" onclick="copyTicketShareLink('${t.id}')" title="Copy shareable ticket link">
+                    <i class="fa-regular fa-copy"></i> Share
+                  </button>
+                  <button class="btn btn-primary btn-sm" onclick="viewPersonalizedTicket('${t.id}')">
+                    <i class="fa-solid fa-qrcode"></i> View Ticket
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--status-error);">Failed to load your tickets.</div>`;
+  }
+}
+
+// -------------------------------------------------------------
+// 9. EVENT CREATOR MANAGEMENT & ATTENDEE EXPORT
+// -------------------------------------------------------------
+async function loadMyOrganizedEvents() {
+  const container = document.getElementById('myEventsGridContainer');
+  const emptyState = document.getElementById('myEventsEmptyState');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+      <i class="fa-solid fa-spinner fa-spin fa-2x"></i>
+      <p style="margin-top: 10px;">Loading your organized events...</p>
+    </div>
+  `;
+
+  try {
+    const { ok, data } = await authFetch('/events/creator/my-events');
+    if (ok && data.success) {
+      const myEvents = data.events || [];
+      if (myEvents.length === 0) {
+        container.innerHTML = '';
+        if (emptyState) emptyState.style.display = 'block';
+      } else {
+        if (emptyState) emptyState.style.display = 'none';
+        container.innerHTML = myEvents.map(ev => {
+          let totalSold = 0;
+          (ev.ticketTypes || []).forEach(tt => { totalSold += (parseInt(tt.quantitySold, 10) || 0); });
+          const isPublished = ev.status === 'published';
+
+          return `
+            <div class="event-card">
+              <div class="event-banner-wrap" style="height: 140px;">
+                <img src="${ev.bannerUrl || 'Image.png'}" alt="${ev.title}" class="event-banner-img" onerror="this.src='Image.png'">
+                <div class="event-status-badge badge-${isPublished ? 'success' : 'warning'}">
+                  ${isPublished ? 'Published' : 'Draft'}
+                </div>
+              </div>
+              <div class="event-card-content">
+                <h3 class="event-card-title">${ev.title}</h3>
+                <div class="event-card-meta">
+                  <div class="event-card-meta-item">
+                    <i class="fa-solid fa-calendar-day"></i>
+                    <span>${ev.date} at ${ev.time}</span>
+                  </div>
+                  <div class="event-card-meta-item">
+                    <i class="fa-solid fa-users"></i>
+                    <span><strong>${totalSold}</strong> tickets sold</span>
+                  </div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--border-color);">
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openAttendeesModal('${ev.id}')">
+                      <i class="fa-solid fa-users"></i> Attendees
+                    </button>
+                    <button class="btn btn-outline btn-sm" style="flex: 1;" onclick="openQrScanner('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+                      <i class="fa-solid fa-qrcode"></i> Scan
+                    </button>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" style="flex: 1;" onclick="openEditEventModal('${ev.id}')">
+                      <i class="fa-solid fa-pen-to-square"></i> Edit Event
+                    </button>
+                    <button class="btn btn-outline btn-sm" style="color: var(--status-error); border-color: rgba(239, 68, 68, 0.4); padding: 6px 12px;" title="Delete Event" onclick="deleteCreatorEvent('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+                      <i class="fa-solid fa-trash-can"></i>
+                    </button>
+                  </div>
+                  ${!isPublished ? `
+                    <button class="btn btn-primary btn-sm btn-block" onclick="publishCreatorEvent('${ev.id}')">
+                      <i class="fa-solid fa-upload"></i> Publish Event Now
+                    </button>
+                  ` : `
+                    <button class="btn btn-outline btn-sm btn-block" onclick="openEventDetails('${ev.slug || ev.id}')">
+                      <i class="fa-solid fa-share-nodes"></i> Share / Preview
+                    </button>
+                  `}
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--status-error);">Failed to load events.</div>`;
+  }
+}
+
+async function deleteCreatorEvent(eventId, eventTitle) {
+  if (!confirm(`Are you sure you want to delete "${eventTitle}"? This will remove the event from ticket sales and the public marketplace.`)) {
+    return;
+  }
+
+  try {
+    const { ok, data } = await authFetch(`/events/${eventId}`, {
+      method: 'DELETE'
+    });
+
+    if (ok && data.success) {
+      showToast(data.message || 'Event deleted successfully.', 'success');
+      loadMyOrganizedEvents();
+      loadMarketplaceEvents();
+    } else {
+      showToast(data.message || 'Failed to delete event.', 'error');
+    }
+  } catch (err) {
+    showToast('Server error while deleting event.', 'error');
+  }
+}
+
+async function publishCreatorEvent(eventId) {
+  if (!confirm('Are you ready to publish this event publicly? Attendees will be able to purchase tickets.')) return;
+  const { ok, data } = await authFetch(`/events/${eventId}/publish`, { method: 'POST' });
+  if (ok && data.success) {
+    showToast('Event published successfully!', 'success');
+    loadMyOrganizedEvents();
+    loadMarketplaceEvents();
+  } else {
+    showToast(data.message || 'Failed to publish event.', 'error');
+  }
+}
+
+// Attendees Modal & Search
+async function openAttendeesModal(eventId) {
+  const modal = document.getElementById('attendeesModal');
+  if (!modal) return;
+
+  const { ok, data } = await authFetch(`/events/${eventId}/attendees`);
+  if (!ok || !data.success) {
+    showToast('Failed to load attendee list.', 'error');
+    return;
+  }
+
+  State.activeAttendeesData = data;
+  document.getElementById('attModalTitle').innerText = `Attendees: ${data.event.title}`;
+  document.getElementById('attStatTicketsSold').innerText = data.stats.totalTicketsSold;
+  document.getElementById('attStatGrossSales').innerText = formatNaira(data.stats.grossRevenue);
+  document.getElementById('attStatCommission').innerText = formatNaira(data.stats.commission);
+  document.getElementById('attStatNetEarnings').innerText = formatNaira(data.stats.creatorNetEarnings);
+
+  renderAttendeesTable(data.attendees || []);
+  openModal('attendeesModal');
+}
+
+function renderAttendeesTable(list) {
+  const tbody = document.getElementById('attendeesTableBody');
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">No attendees found.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(a => `
+    <tr>
+      <td style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent-blue-light);">${a.id}</td>
+      <td><strong>${a.ticketHolderName}</strong></td>
+      <td style="color: var(--text-secondary);">${a.buyerName}</td>
+      <td><span class="badge badge-info">${a.ticketTypeName}</span></td>
+      <td style="font-family: var(--font-mono);">${formatNaira(a.ticketPrice)}</td>
+      <td><span class="badge badge-${a.status === 'used' ? 'warning' : 'success'}">${a.status.toUpperCase()}</span></td>
+      <td style="color: var(--text-muted); font-size: 0.78rem;">${formatDateTime(a.createdAt)}</td>
+    </tr>
+  `).join('');
+}
+
+function filterAttendeesTable() {
+  if (!State.activeAttendeesData) return;
+  const q = document.getElementById('attSearchInput').value.toLowerCase().trim();
+  const filtered = (State.activeAttendeesData.attendees || []).filter(a =>
+    (a.ticketHolderName && a.ticketHolderName.toLowerCase().includes(q)) ||
+    (a.buyerName && a.buyerName.toLowerCase().includes(q)) ||
+    (a.id && a.id.toLowerCase().includes(q)) ||
+    (a.ticketTypeName && a.ticketTypeName.toLowerCase().includes(q))
+  );
+  renderAttendeesTable(filtered);
+}
+
+function exportAttendeesCSV() {
+  if (!State.activeAttendeesData || !State.activeAttendeesData.attendees) {
+    showToast('No attendees to export', 'warning');
+    return;
+  }
+
+  const attendees = State.activeAttendeesData.attendees;
+  let csv = 'Ticket ID,Ticket Holder,Buyer Name,Category,Price,Status,Purchase Date\n';
+  attendees.forEach(a => {
+    csv += `"${a.id}","${a.ticketHolderName}","${a.buyerName}","${a.ticketTypeName}","${a.ticketPrice}","${a.status}","${a.createdAt}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `Attendees_${State.activeAttendeesData.event.slug || 'Event'}.csv`);
+  link.click();
+}
+
+function exportAttendeesPDF() {
+  if (!State.activeAttendeesData || !State.activeAttendeesData.attendees) {
+    showToast('No attendees to export', 'warning');
+    return;
+  }
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const event = State.activeAttendeesData.event;
+    const attendees = State.activeAttendeesData.attendees;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('STRICTWALLET — ATTENDEE MANIFEST', 14, 20);
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Event: ${event.title}`, 14, 28);
+    doc.text(`Total Attendees: ${attendees.length} | Export Date: ${new Date().toLocaleDateString()}`, 14, 34);
+
+    // Group Attendees by Ticket Type (as required by Requirement 19)
+    const grouped = {};
+    attendees.forEach(a => {
+      const type = (a.ticketTypeName || 'Standard').toUpperCase();
+      if (!grouped[type]) grouped[type] = [];
+      grouped[type].push(a);
+    });
+
+    let y = 46;
+    for (const [type, list] of Object.entries(grouped)) {
+      if (y > 260) { doc.addPage(); y = 20; }
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.text(`CATEGORY: ${type} (${list.length} attendees)`, 14, y);
+      y += 6;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+
+      list.forEach((att, idx) => {
+        if (y > 275) { doc.addPage(); y = 20; }
+        const line = `${idx + 1}. ${att.ticketHolderName} — ID: ${att.id} — Status: ${att.status.toUpperCase()}`;
+        doc.text(line, 18, y);
+        y += 6;
+      });
+      y += 8;
+    }
+
+    doc.save(`Attendees_${event.slug || 'Event'}.pdf`);
+    showToast('Attendee manifest PDF downloaded successfully!', 'success');
+  } catch (err) {
+    console.error('PDF Export Error:', err);
+    showToast('Failed to generate PDF. Exporting as CSV instead.', 'error');
+    exportAttendeesCSV();
+  }
+}
+
+// -------------------------------------------------------------
+// 10. QR SCANNER & TICKET VERIFICATION
+// -------------------------------------------------------------
+function openQrScanner(eventId, eventTitle) {
+  State.qrActiveEventId = eventId;
+  document.getElementById('qrScannerEventTitle').innerText = `Event: ${eventTitle}`;
+  document.getElementById('qrScanResultBox').style.display = 'none';
+  document.getElementById('manualVerifyInput').value = '';
+
+  openModal('qrScannerModal');
+
+  // Initialize camera scanner if library available
+  setTimeout(() => {
+    try {
+      if (window.Html5Qrcode) {
+        if (State.html5QrScanner) {
+          State.html5QrScanner.stop().catch(() => {});
+        }
+        State.html5QrScanner = new Html5Qrcode('qrReader');
+        State.html5QrScanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            onQrCodeDetected(decodedText);
+          },
+          () => {}
+        ).catch(err => {
+          console.warn('Camera access error:', err);
+        });
+      }
+    } catch (e) {
+      console.warn('QR scanner initialization skipped:', e);
+    }
+  }, 300);
+}
+
+function closeQrScanner() {
+  if (State.html5QrScanner) {
+    State.html5QrScanner.stop().then(() => {
+      State.html5QrScanner.clear();
+      State.html5QrScanner = null;
+    }).catch(() => {
+      State.html5QrScanner = null;
+    });
+  }
+  closeModal('qrScannerModal');
+}
+
+let lastScanTime = 0;
+async function onQrCodeDetected(token) {
+  const now = Date.now();
+  if (now - lastScanTime < 3000) return; // debounce scans
+  lastScanTime = now;
+  await verifyTicketByToken(token);
+}
+
+async function verifyManualTicket() {
+  const token = document.getElementById('manualVerifyInput').value.trim();
+  if (!token) {
+    showToast('Please enter a ticket code or token.', 'warning');
+    return;
+  }
+  await verifyTicketByToken(token);
+}
+
+async function verifyTicketByToken(token) {
+  const resultBox = document.getElementById('qrScanResultBox');
+  resultBox.style.display = 'block';
+  resultBox.className = 'verification-result-box';
+  resultBox.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying ticket with backend...`;
+
+  try {
+    const isToken = token.startsWith('SEC-QR-');
+    const payload = isToken ? { qrToken: token } : { ticketId: token };
+
+    const { ok, data } = await authFetch(`/events/${State.qrActiveEventId}/verify-ticket`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (ok && data.success && data.code === 'VALID') {
+      resultBox.className = 'verification-result-box valid';
+      resultBox.innerHTML = `
+        <i class="fa-solid fa-circle-check fa-2x" style="color: var(--status-success);"></i>
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 800; color: var(--status-success);">VALID TICKET</div>
+          <div><strong>Event:</strong> ${data.ticket.eventName}</div>
+          <div><strong>Ticket:</strong> ${data.ticket.ticketTypeName}</div>
+          <div><strong>Holder:</strong> ${data.ticket.ticketHolderName}</div>
+          <div style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted);">Ticket ID: ${data.ticket.id}</div>
+        </div>
+      `;
+      showToast('VALID TICKET: Checked in successfully!', 'success');
+    } else if (data.code === 'ALREADY_USED') {
+      resultBox.className = 'verification-result-box already-used';
+      resultBox.innerHTML = `
+        <i class="fa-solid fa-triangle-exclamation fa-2x" style="color: var(--status-warning);"></i>
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 800; color: var(--status-warning);">TICKET ALREADY USED</div>
+          <div><strong>Used on:</strong> ${formatDateTime(data.ticket?.usedAt)}</div>
+          <div><strong>Holder:</strong> ${data.ticket?.ticketHolderName || '-'}</div>
+        </div>
+      `;
+      showToast('WARNING: Ticket already checked in previously!', 'warning');
+    } else {
+      resultBox.className = 'verification-result-box invalid';
+      resultBox.innerHTML = `
+        <i class="fa-solid fa-circle-xmark fa-2x" style="color: var(--status-error);"></i>
+        <div>
+          <div style="font-size: 1.1rem; font-weight: 800; color: var(--status-error);">INVALID TICKET</div>
+          <div style="font-size: 0.85rem;">${data.message || 'No ticket found matching scanned QR code.'}</div>
+        </div>
+      `;
+      showToast('INVALID TICKET', 'error');
+    }
+  } catch (err) {
+    resultBox.className = 'verification-result-box invalid';
+    resultBox.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Connection error during verification.`;
+  }
+}
+
+// -------------------------------------------------------------
+// 11. EVENT CREATOR WALLET & STROWALLET WITHDRAWAL
+// -------------------------------------------------------------
+async function loadOrganizerWallet(forceTableRender = true) {
+  const balEl = document.getElementById('organizerWalletBalance');
+  const tableEl = document.getElementById('creatorWithdrawalsTableBody');
+  if (!balEl && !tableEl) return;
+
+  try {
+    const { ok, data } = await authFetch('/events/creator/wallet');
+    if (ok && data.success) {
+      State.organizerWalletBalance = data.wallet.balance;
+      if (balEl) balEl.innerText = formatNaira(data.wallet.balance);
+      State.organizerWithdrawals = Array.isArray(data.withdrawals) ? data.withdrawals : [];
+      if (forceTableRender) {
+        renderCreatorWithdrawalsTable(State.organizerWithdrawals);
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load organizer wallet', e);
+  }
+}
+
+async function openWithdrawalModal() {
+  if (!State.token || !State.user) {
+    showToast('Please sign in to access your wallet.', 'info');
+    return;
+  }
+
+  document.getElementById('wthAvailableBalanceDisplay').innerText = formatNaira(State.organizerWalletBalance || 0);
+  document.getElementById('wthAmount').value = '';
+  document.getElementById('wthAccountNumber').value = '';
+  document.getElementById('wthNarration').value = 'Ticket sales payout';
+  document.getElementById('wthPin').value = '';
+  document.getElementById('wthNameEnquiryRef').value = '';
+  document.getElementById('wthAccountNameDisplay').innerText = 'Enter 10-digit account number to verify owner name...';
+  document.getElementById('wthAccountNameDisplay').style.color = 'var(--text-muted)';
+  calculateWithdrawalTotal();
+
+  openModal('eventWithdrawModal');
+  loadStrowalletBanks();
+}
+
+async function loadStrowalletBanks(force = false) {
+  const select = document.getElementById('wthBankSelect');
+  if (!select) return;
+
+  // Already populated with options
+  if (!force && State.strowalletBanks && State.strowalletBanks.length > 0 && select.options.length > 2) {
+    return;
+  }
+
+  // If in state already, populate immediately
+  if (State.strowalletBanks && State.strowalletBanks.length > 0) {
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Select destination bank --</option>' + 
+      State.strowalletBanks.map(b => `<option value="${b.code}" data-name="${b.name}">${b.name}</option>`).join('');
+    if (currentVal) select.value = currentVal;
+    return;
+  }
+
+  select.innerHTML = '<option value="">-- Loading Nigerian banks... --</option>';
+
+  try {
+    const { ok, data } = await authFetch('/events/withdrawals/banks');
+    if (ok && data.success && Array.isArray(data.banks) && data.banks.length > 0) {
+      State.strowalletBanks = data.banks;
+      const currentVal = select.value;
+      select.innerHTML = '<option value="">-- Select destination bank --</option>' + 
+        data.banks.map(b => `<option value="${b.code}" data-name="${b.name}">${b.name}</option>`).join('');
+      if (currentVal) select.value = currentVal;
+    } else {
+      select.innerHTML = '<option value="">-- Failed to load banks, click here to retry --</option>';
+    }
+  } catch (err) {
+    console.error('Error loading banks:', err);
+    select.innerHTML = '<option value="">-- Failed to load banks, click here to retry --</option>';
+  }
+}
+
+function calculateWithdrawalTotal() {
+  const amountInput = document.getElementById('wthAmount');
+  const stampDutyDisplay = document.getElementById('wthStampDutyDisplay');
+  const totalDeductionDisplay = document.getElementById('wthTotalDeductionDisplay');
+  const amount = parseFloat(amountInput ? amountInput.value : 0);
+
+  const stampDuty = (!isNaN(amount) && amount >= 10000) ? 50 : 0;
+  if (stampDutyDisplay) {
+    stampDutyDisplay.innerText = `₦${stampDuty}`;
+  }
+
+  if (totalDeductionDisplay) {
+    if (!isNaN(amount) && amount > 0) {
+      const charge = 20.00;
+      const total = Math.round((amount + charge + stampDuty) * 100) / 100;
+      totalDeductionDisplay.innerText = formatNaira(total);
+    } else {
+      totalDeductionDisplay.innerText = '₦0.00';
+    }
+  }
+}
+
+function onBankSelectionChange() {
+  const accNum = document.getElementById('wthAccountNumber').value.trim();
+  if (accNum.length === 10) {
+    verifyStrowalletAccount();
+  }
+}
+
+let verifyAccTimeout = null;
+function onAccountNumberInput(el) {
+  el.value = el.value.replace(/\D/g, '');
+  if (el.value.length === 10) {
+    clearTimeout(verifyAccTimeout);
+    verifyAccTimeout = setTimeout(verifyStrowalletAccount, 400);
+  } else {
+    document.getElementById('wthAccountNameDisplay').innerText = 'Enter 10-digit account number to verify owner name...';
+    document.getElementById('wthAccountNameDisplay').style.color = 'var(--text-muted)';
+    document.getElementById('wthNameEnquiryRef').value = '';
+  }
+}
+
+async function verifyStrowalletAccount() {
+  const bankSelect = document.getElementById('wthBankSelect');
+  const bankCode = bankSelect.value;
+  const accountNumber = document.getElementById('wthAccountNumber').value.trim();
+  const display = document.getElementById('wthAccountNameDisplay');
+
+  if (!bankCode) {
+    display.innerText = 'Please select a bank first.';
+    display.style.color = 'var(--status-warning)';
+    return;
+  }
+
+  if (accountNumber.length !== 10) {
+    display.innerText = 'Account number must be 10 digits.';
+    display.style.color = 'var(--status-warning)';
+    return;
+  }
+
+  display.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-emerald);"></i> Verifying account with bank...`;
+  display.style.color = 'var(--accent-emerald)';
+
+  try {
+    const { ok, data } = await authFetch('/events/withdrawals/verify-account', {
+      method: 'POST',
+      body: JSON.stringify({ bankCode, accountNumber })
+    });
+
+    if (ok && data.success && data.accountName) {
+      display.innerText = `✓ ${data.accountName}`;
+      display.style.color = 'var(--accent-emerald)';
+      document.getElementById('wthNameEnquiryRef').value = data.nameEnquiryReference || '';
+    } else {
+      display.innerText = `✗ ${data.message || 'Could not verify account name'}`;
+      display.style.color = 'var(--status-error)';
+      document.getElementById('wthNameEnquiryRef').value = '';
+    }
+  } catch (err) {
+    display.innerText = 'Verification network error';
+    display.style.color = 'var(--status-error)';
+  }
+}
+
+async function submitEventWithdrawal() {
+  const amount = parseFloat(document.getElementById('wthAmount').value);
+  const bankSelect = document.getElementById('wthBankSelect');
+  const bankCode = bankSelect.value;
+  const bankName = bankSelect.options[bankSelect.selectedIndex]?.getAttribute('data-name') || '';
+  const accountNumber = document.getElementById('wthAccountNumber').value.trim();
+  const accountName = document.getElementById('wthAccountNameDisplay').innerText.replace(/^✓\s*/, '').trim();
+  const narration = document.getElementById('wthNarration').value.trim();
+  const pin = document.getElementById('wthPin').value;
+  const nameEnquiryRef = document.getElementById('wthNameEnquiryRef').value;
+
+  if (isNaN(amount) || amount < 100) {
+    showToast('Minimum withdrawal amount is ₦100.', 'error');
+    return;
+  }
+
+  if (!bankCode || accountNumber.length !== 10) {
+    showToast('Please select a bank and enter a valid 10-digit account number.', 'error');
+    return;
+  }
+
+  if (!accountName || accountName.includes('verify') || accountName.includes('Could not') || accountName.includes('error')) {
+    showToast('Please verify the account owner name before proceeding.', 'error');
+    return;
+  }
+
+  if (!narration) {
+    showToast('Narration is required.', 'error');
+    return;
+  }
+
+  if (!pin || pin.length !== 4) {
+    showToast('Please enter your 4-digit STRICTWALLET Transaction PIN.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitWithdrawal');
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing Transfer...`;
+
+  try {
+    const { ok, data } = await authFetch('/events/withdrawals/request', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        bankCode,
+        bankName,
+        accountNumber,
+        accountName,
+        narration,
+        nameEnquiryRef,
+        pin
+      })
+    });
+
+    if (ok && data.success) {
+      showToast(data.message || 'Withdrawal processed successfully!', 'success');
+      closeModal('eventWithdrawModal');
+      await loadOrganizerWallet(true);
+      if (data.withdrawal) {
+        showEventWithdrawalReceipt(data.withdrawal);
+      }
+    } else {
+      showToast(data.message || 'Withdrawal request failed.', 'error');
+      closeModal('eventWithdrawModal');
+      await loadOrganizerWallet(true);
+      if (data && data.withdrawal) {
+        showEventWithdrawalReceipt(data.withdrawal);
+      }
+    }
+  } catch (err) {
+    showToast('Error communicating with withdrawal service.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-arrow-up-from-bracket"></i> Confirm Withdrawal`;
+  }
+}
+
+// -------------------------------------------------------------
+// 12. EVENT CREATOR WALLET TRANSACTIONS & WITHDRAWAL RECEIPTS
+// -------------------------------------------------------------
+
+function formatMaskedAccount(acc) {
+  if (!acc) return '-';
+  const clean = acc.toString().trim();
+  if (clean.length <= 4) return clean;
+  return `•••• •••• ${clean.slice(-4)}`;
+}
+
+function renderCreatorWithdrawalsTable(withdrawals) {
+  const tbody = document.getElementById('creatorWithdrawalsTableBody');
+  if (!tbody) return;
+
+  if (!Array.isArray(withdrawals) || withdrawals.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" style="text-align: center; padding: 36px 16px; color: var(--text-muted);">
+          <i class="fa-solid fa-receipt" style="font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.35;"></i>
+          No Event Creator Wallet withdrawals yet.
+          <div style="font-size: 0.78rem; margin-top: 4px; color: var(--text-secondary);">When you withdraw your ticket sales earnings, your verified transactions and receipts will appear here.</div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = withdrawals.map(wth => {
+    let badgeClass = 'badge-success';
+    let icon = '<i class="fa-solid fa-circle-check"></i>';
+    if (wth.status === 'Pending' || wth.status === 'Processing') {
+      badgeClass = 'badge-warning';
+      icon = '<i class="fa-solid fa-clock"></i>';
+    } else if (wth.status === 'Failed') {
+      badgeClass = 'badge-danger';
+      icon = '<i class="fa-solid fa-circle-xmark"></i>';
+    }
+
+    const sent = parseFloat(wth.amount || 0);
+
+    return `
+      <tr>
+        <td><code style="color: var(--accent-emerald); font-size: 0.8rem; font-weight: 700;">${wth.id}</code></td>
+        <td><strong style="color: #FFF; font-size: 0.82rem;">Withdrawal</strong></td>
+        <td>
+          <div style="font-weight: 600; color: #FFF;">${escapeHTML(wth.bankName || 'Bank')}</div>
+          <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHTML(wth.accountName || '')}</div>
+        </td>
+        <td style="font-family: var(--font-mono); font-size: 0.82rem;">${formatMaskedAccount(wth.accountNumber)}</td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: #FFF;">
+          ${formatNaira(sent)}
+        </td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(wth.createdAt)}</td>
+        <td><span class="badge ${badgeClass}">${icon} ${wth.status}</span></td>
+        <td>
+          <button class="btn btn-secondary btn-sm" onclick="showEventWithdrawalReceiptById('${wth.id}')" title="View Withdrawal Receipt">
+            <i class="fa-solid fa-receipt"></i> Receipt
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function showEventWithdrawalReceipt(wth) {
+  if (!wth) return;
+  State.currentCreatorReceiptWithdrawal = wth;
+  const body = document.getElementById('creatorWithdrawalReceiptBody');
+  if (!body) return;
+
+  const isSuccess = wth.status === 'Successful';
+  const isFailed = wth.status === 'Failed';
+  const isPending = wth.status === 'Pending' || wth.status === 'Processing';
+
+  let badgeClass = isSuccess ? 'badge-success' : isFailed ? 'badge-danger' : 'badge-warning';
+  let badgeIcon = isSuccess ? '<i class="fa-solid fa-circle-check"></i>' : isFailed ? '<i class="fa-solid fa-circle-xmark"></i>' : '<i class="fa-solid fa-clock"></i>';
+
+  const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20) + (wth.stampDuty || 0)));
+  const fee = parseFloat(wth.charge || 20.00);
+  const stampDuty = parseFloat(wth.stampDuty || 0);
+  const sent = parseFloat(wth.amount || 0);
+
+  const txDate = wth.createdAt ? new Date(wth.createdAt) : new Date();
+  const dateStr = txDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const timeStr = txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+  body.innerHTML = `
+    <!-- STRICTWALLET Receipt Header -->
+    <div style="text-align: center; margin-bottom: 16px;">
+      <img src="Image.png" alt="STRICTWALLET" style="height: 38px; margin-bottom: 6px;" onerror="this.style.display='none'">
+      <div style="font-size: 1.15rem; font-weight: 800; color: #FFF; letter-spacing: -0.02em;">STRICTWALLET</div>
+      <div style="font-size: 0.85rem; color: var(--accent-emerald); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px;">
+        Event Creator Wallet Withdrawal Receipt
+      </div>
+      <div style="margin-top: 8px;">
+        <span class="badge ${badgeClass}" style="font-size: 0.85rem; padding: 5px 14px;">
+          ${badgeIcon} ${wth.status}
+        </span>
+      </div>
+    </div>
+
+    <!-- Amount Sent Highlight -->
+    <div style="text-align: center; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 14px;">
+      <div style="font-size: 0.76rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.08em; margin-bottom: 2px;">
+        Net Amount Sent to Bank
+      </div>
+      <div style="font-size: 1.85rem; font-weight: 800; font-family: var(--font-mono); color: #FFF;">
+        ${formatNaira(sent)}
+      </div>
+      <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">
+        Destination: <strong>${escapeHTML(wth.bankName || 'Bank')}</strong>
+      </div>
+    </div>
+
+    <!-- Breakdown Details -->
+    <div style="background: rgba(13, 21, 45, 0.65); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; font-size: 0.85rem; display: flex; flex-direction: column; gap: 9px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Transaction Type:</span>
+        <strong style="color: #FFF;">Event Creator Wallet Withdrawal</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Amount Withdrawn:</span>
+        <strong style="color: #FFF; font-family: var(--font-mono);">${formatNaira(gross)}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Withdrawal Charge:</span>
+        <strong style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(fee)}</strong>
+      </div>
+      ${stampDuty > 0 ? `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Stamp Duty:</span>
+        <strong style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(stampDuty)}</strong>
+      </div>` : ''}
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 6px;">
+        <span style="color: var(--text-muted);">Amount Sent:</span>
+        <strong style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 0.95rem;">${formatNaira(sent)}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 6px;">
+        <span style="color: var(--text-muted);">Bank:</span>
+        <strong style="color: #FFF;">${escapeHTML(wth.bankName || 'Bank')}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Account Name:</span>
+        <strong style="color: #FFF;">${escapeHTML(wth.accountName || '-')}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Account Number:</span>
+        <span style="color: #FFF; font-family: var(--font-mono);">${formatMaskedAccount(wth.accountNumber)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Description / Narration:</span>
+        <span style="color: #FFF;">${escapeHTML(wth.narration || 'Ticket sales payout')}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 6px;">
+        <span style="color: var(--text-muted);">Transaction Reference:</span>
+        <code style="color: var(--accent-emerald); font-size: 0.8rem;">${wth.id}</code>
+      </div>
+      ${wth.providerReference ? `
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Provider Reference:</span>
+        <span style="color: #FFF; font-family: var(--font-mono); font-size: 0.8rem;">${escapeHTML(wth.providerReference)}</span>
+      </div>` : ''}
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Date:</span>
+        <span style="color: #FFF;">${dateStr}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Time:</span>
+        <span style="color: #FFF;">${timeStr}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="color: var(--text-muted);">Status:</span>
+        <span class="badge ${badgeClass}" style="font-size: 0.72rem;">${wth.status}</span>
+      </div>
+    </div>
+
+    ${isFailed && wth.failureReason ? `
+    <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 12px; color: #FCA5A5; font-size: 0.82rem; line-height: 1.45;">
+      <i class="fa-solid fa-triangle-exclamation"></i> <strong>Failure Reason:</strong> ${escapeHTML(wth.failureReason)}
+      <div style="font-size: 0.75rem; color: #F87171; margin-top: 4px;">Your Event Creator Wallet balance has been automatically restored.</div>
+    </div>` : ''}
+
+    <div style="text-align: center; margin-top: 14px; font-size: 0.74rem; color: var(--text-muted);">
+      <i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i> Verified STRICTWALLET Event Creator Financial Ledger Record
+    </div>
+  `;
+
+  openModal('creatorWithdrawalReceiptModal');
+}
+
+async function showEventWithdrawalReceiptById(id) {
+  let wth = (State.organizerWithdrawals || []).find(w => w.id === id);
+  if (wth) {
+    showEventWithdrawalReceipt(wth);
+    return;
+  }
+  try {
+    const { ok, data } = await authFetch(`/events/creator/withdrawals/${id}`);
+    if (ok && data.success && data.withdrawal) {
+      showEventWithdrawalReceipt(data.withdrawal);
+    } else {
+      showToast('Could not load withdrawal receipt.', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to load withdrawal receipt.', 'error');
+  }
+}
+
+function downloadCurrentCreatorReceiptPdf() {
+  if (!State.currentCreatorReceiptWithdrawal) {
+    showToast('No receipt selected for download.', 'warning');
+    return;
+  }
+  downloadEventWithdrawalReceiptPdf(State.currentCreatorReceiptWithdrawal);
+}
+
+function downloadEventWithdrawalReceiptPdf(wth) {
+  if (!wth) return;
+  const { jsPDF } = window.jspdf || {};
+  if (!jsPDF) {
+    showToast('PDF generation engine not available.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnDownloadCreatorReceiptPdf');
+  const origText = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PDF...`;
+  }
+
+  try {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 16;
+    const contentW = pageW - margin * 2;
+
+    // Header Navy Bar
+    doc.setFillColor(13, 21, 45); // #0D152D
+    doc.rect(0, 0, pageW, 36, 'F');
+
+    // Emerald Top Stripe
+    doc.setFillColor(0, 208, 156); // #00D09C
+    doc.rect(0, 0, pageW, 4, 'F');
+
+    // STRICTWALLET Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(255, 255, 255);
+    doc.text('STRICTWALLET', margin, 20);
+
+    doc.setFontSize(8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 208, 156);
+    doc.text('FINTECH WALLET & EVENT CREATOR TICKETING PLATFORM', margin, 27);
+
+    // Document Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('EVENT CREATOR WALLET WITHDRAWAL RECEIPT', margin, 46);
+
+    // Status Banner
+    const isSuccess = wth.status === 'Successful';
+    const isFailed = wth.status === 'Failed';
+    const bannerColor = isSuccess ? [236, 253, 245] : isFailed ? [254, 242, 242] : [255, 251, 235];
+    const bannerBorder = isSuccess ? [167, 243, 208] : isFailed ? [254, 202, 202] : [253, 230, 138];
+    const textColor = isSuccess ? [5, 150, 105] : isFailed ? [220, 38, 38] : [217, 119, 6];
+
+    doc.setFillColor(bannerColor[0], bannerColor[1], bannerColor[2]);
+    doc.setDrawColor(bannerBorder[0], bannerBorder[1], bannerBorder[2]);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(margin, 52, contentW, 13, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    const statusLabel = isSuccess ? 'STATUS: SUCCESSFUL (FUNDS TRANSFERRED)' : isFailed ? 'STATUS: FAILED (WALLET BALANCE RESTORED)' : `STATUS: ${wth.status.toUpperCase()}`;
+    doc.text(statusLabel, pageW / 2, 60.5, { align: 'center' });
+
+    // Amount Sent Highlight Box
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, 70, contentW, 25, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text('NET AMOUNT SENT TO DESTINATION BANK', pageW / 2, 78, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(17);
+    doc.setTextColor(15, 23, 42);
+    const netAmountStr = `NGN ${parseFloat(wth.amount || 0).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    doc.text(netAmountStr, pageW / 2, 88, { align: 'center' });
+
+    // Details Rows
+    const startY = 104;
+    const gross = parseFloat(wth.totalDeducted || (wth.amount + (wth.charge || 20) + (wth.stampDuty || 0)));
+    const fee = parseFloat(wth.charge || 20.00);
+    const stampDuty = parseFloat(wth.stampDuty || 0);
+    const sent = parseFloat(wth.amount || 0);
+
+    const maskedAcc = wth.accountNumber ? `•••• •••• ${wth.accountNumber.toString().slice(-4)}` : 'N/A';
+    const txDate = wth.createdAt ? new Date(wth.createdAt) : new Date();
+    const dateStr = txDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
+    const rows = [
+      ['Transaction Reference', wth.id || 'N/A'],
+      ['Provider Reference', wth.providerReference || 'Pending / N/A'],
+      ['Transaction Type', 'Event Creator Wallet Withdrawal'],
+      ['Gross Amount Withdrawn', `NGN ${gross.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
+      ['Organizer Withdrawal Charge', `NGN ${fee.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
+      ...(stampDuty > 0 ? [['Statutory Stamp Duty', `NGN ${stampDuty.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`]] : []),
+      ['Net Amount Sent', `NGN ${sent.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`],
+      ['Destination Bank', wth.bankName || 'N/A'],
+      ['Account Name', wth.accountName || 'N/A'],
+      ['Account Number', maskedAcc],
+      ['Description / Narration', wth.narration || 'Ticket sales payout'],
+      ['Date & Time', `${dateStr}, ${timeStr}`],
+      ['Transfer Status', wth.status || 'Pending']
+    ];
+
+    if (isFailed && wth.failureReason) {
+      rows.push(['Failure Reason', wth.failureReason]);
+    }
+
+    let curY = startY;
+    rows.forEach(([label, val], idx) => {
+      if (idx % 2 === 0) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(margin, curY - 4.5, contentW, 7.5, 'F');
+      }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(100, 116, 139);
+      doc.text(label, margin + 3, curY);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(15, 23, 42);
+      const splitVal = doc.splitTextToSize(val.toString(), 95);
+      doc.text(splitVal[0], pageW - margin - 3, curY, { align: 'right' });
+
+      curY += 8;
+    });
+
+    // Footer
+    doc.setDrawColor(226, 232, 240);
+    doc.setLineWidth(0.4);
+    doc.line(margin, 266, pageW - margin, 266);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Official STRICTWALLET Event Creator Receipt • Generated on ${new Date().toLocaleString()}`, margin, 273);
+    doc.text('This is an authentic transaction receipt from the STRICTWALLET financial ledger.', margin, 278);
+
+    doc.save(`STRICTWALLET_Withdrawal_${wth.id || 'Receipt'}.pdf`);
+    showToast('Withdrawal receipt PDF downloaded successfully!', 'success');
+  } catch (pdfErr) {
+    console.error('Receipt PDF Generation Error:', pdfErr);
+    showToast('Failed to generate PDF receipt.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origText || `<i class="fa-solid fa-file-pdf"></i> Download Receipt (PDF)`;
+    }
+  }
+}
+
+function scrollToCreatorTransactions() {
+  if (State.currentView !== 'viewSettings') {
+    navigateToView('viewSettings');
+  }
+  setTimeout(() => {
+    const el = document.getElementById('creatorWalletTxSection');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 150);
+}
+

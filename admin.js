@@ -13,8 +13,10 @@ const AdminState = {
   activeAdminTicketId: null
 };
 
-// API Base URL
-const API_BASE = 'https://datapay.onrender.com/api';
+// API Base URL (Relative /api for local development & same-origin production)
+const API_BASE = '/api';
+
+
 
 // Toast Notification Manager
 function showAdminToast(message, type = 'info') {
@@ -154,20 +156,26 @@ function navigateAdminView(viewId) {
     viewAdminOverview: 'Overview & Analytics',
     viewAdminUsers: 'User Management',
     viewAdminTransactions: 'Master Transaction Ledger',
+    viewAdminDeposits: 'Payments & Paystack Deposits Management',
+    viewAdminEvents: 'Events & Creator Payouts Management',
     viewAdminPricing: 'Pricing & Profit Matrix',
     viewAdminSupport: 'Support Desk & Tickets',
     viewAdminLogs: 'Administrative Audit Trail',
-    viewAdminSocial: 'Social Media & Community Channels'
+    viewAdminSocial: 'Social Media & Community Channels',
+    viewAdminSms: 'SMS Alert Revenue & Audit'
   };
   document.getElementById('adminPageHeadline').innerText = titles[viewId] || 'Admin Console';
 
   if (viewId === 'viewAdminOverview') loadAdminOverview();
   if (viewId === 'viewAdminUsers') loadAdminUsers();
   if (viewId === 'viewAdminTransactions') loadAdminTransactions();
+  if (viewId === 'viewAdminDeposits') loadAdminDeposits();
+  if (viewId === 'viewAdminEvents') loadAdminEventsAnalytics();
   if (viewId === 'viewAdminPricing') loadAdminPricing();
   if (viewId === 'viewAdminSupport') loadAdminSupportTickets();
   if (viewId === 'viewAdminLogs') loadAdminAuditLogs();
   if (viewId === 'viewAdminSocial') loadAdminSocialLinks();
+  if (viewId === 'viewAdminSms') loadAdminSmsRevenue();
 }
 
 // -------------------------------------------------------------
@@ -260,6 +268,34 @@ function setupAdminEventListeners() {
 
   document.getElementById('adminSupportSearch')?.addEventListener('input', debounce(loadAdminSupportTickets, 300));
   document.getElementById('adminSupportStatusFilter')?.addEventListener('change', loadAdminSupportTickets);
+
+  // Payments & Deposits Management Listeners
+  document.getElementById('adminDepositTableSearch')?.addEventListener('input', debounce(loadAdminDeposits, 300));
+  document.getElementById('adminDepositTableStatus')?.addEventListener('change', loadAdminDeposits);
+  document.getElementById('btnRefreshAdminDeposits')?.addEventListener('click', loadAdminDeposits);
+
+  document.getElementById('btnAdminDepositLookup')?.addEventListener('click', () => {
+    const q = document.getElementById('adminDepositLookupInput')?.value.trim();
+    if (q) lookupAdminDeposit(q);
+  });
+
+  document.getElementById('adminDepositLookupInput')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const q = e.target.value.trim();
+      if (q) lookupAdminDeposit(q);
+    }
+  });
+
+  document.getElementById('btnAdminDepositLookupClear')?.addEventListener('click', () => {
+    const input = document.getElementById('adminDepositLookupInput');
+    if (input) input.value = '';
+    const resBox = document.getElementById('adminDepositLookupResult');
+    if (resBox) {
+      resBox.style.display = 'none';
+      resBox.innerHTML = '';
+    }
+  });
 
   // Plan Management Search & Filter bindings
   document.getElementById('adminPlanSearch')?.addEventListener('input', debounce(loadAdminPricing, 300));
@@ -642,7 +678,7 @@ async function loadAdminUsers() {
           </td>
           <td>${u.phone || '-'}</td>
           <td>
-            <strong style="color: var(--accent-blue-light); font-size: 0.82rem;">${u.virtualBankName || 'Nombank MFB'}</strong>
+            <strong style="color: var(--accent-blue-light); font-size: 0.82rem;">${u.virtualBankName || 'Sterling Bank'}</strong>
             <div style="font-family: var(--font-mono); color: #FFF;">${u.virtualAccountNumber || 'Not Generated'}</div>
           </td>
           <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">
@@ -1056,3 +1092,500 @@ function logoutAdmin(showNotification = true) {
   showAdminAuthScreen();
   if (showNotification) showAdminToast('Admin signed out safely.', 'info');
 }
+
+// ==========================================================================
+// ADMIN EVENT TICKETING & WITHDRAWAL ANALYTICS
+// ==========================================================================
+
+async function loadAdminEventsAnalytics() {
+  const tbodyEvents = document.getElementById('admEventsTableBody');
+  const tbodyWth = document.getElementById('admWithdrawalsTableBody');
+
+  if (tbodyEvents) {
+    tbodyEvents.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading event analytics...</td></tr>`;
+  }
+  if (tbodyWth) {
+    tbodyWth.innerHTML = `<tr><td colspan="11" style="text-align: center; color: var(--text-muted); padding: 30px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading withdrawal ledger...</td></tr>`;
+  }
+
+  try {
+    const { ok, data } = await adminFetch('/admin/events/analytics');
+    if (!ok || !data.success) {
+      showAdminToast(data.message || 'Failed to retrieve event analytics', 'error');
+      return;
+    }
+
+    AdminState.adminEventsData = data;
+    const m = data.metrics;
+
+    // 1. Update KPI Card Values
+    document.getElementById('admStatGrossTicketSales').innerText = formatNaira(m.ticketSales.grossTicketSales);
+    document.getElementById('admStatTicketsSold').innerText = m.ticketSales.totalTicketsSold;
+    document.getElementById('admStatTicketCommission').innerText = formatNaira(m.ticketSales.strictwalletCommission);
+    document.getElementById('admStatCreatorEarnings').innerText = formatNaira(m.ticketSales.creatorEarnings);
+
+    document.getElementById('admStatTotalEvents').innerText = m.events.total;
+    document.getElementById('admStatPublishedEvents').innerText = m.events.published;
+    document.getElementById('admStatDraftEvents').innerText = m.events.draft;
+
+    // 2. Update Withdrawal Economics & Platform Profit
+    document.getElementById('admStatSuccessfulWithdrawals').innerText = m.withdrawals.successful;
+    document.getElementById('admStatWithdrawalVolume').innerText = formatNaira(m.withdrawals.totalVolume);
+    document.getElementById('admStatChargesCollected').innerText = formatNaira(m.withdrawals.totalChargesCollected);
+    document.getElementById('admStatProviderFees').innerText = formatNaira(m.withdrawals.totalProviderFees);
+    document.getElementById('admStatNetWithdrawalProfit').innerText = formatNaira(m.withdrawals.totalStrictwalletProfit);
+
+    // 3. Render Tables
+    renderAdminEventsTable(data.events || []);
+    renderAdminWithdrawalsTable(data.withdrawals || []);
+
+  } catch (err) {
+    console.error('Admin Event Analytics Load Error:', err);
+    showAdminToast('Error connecting to event analytics service', 'error');
+  }
+}
+
+function renderAdminEventsTable(events) {
+  const tbody = document.getElementById('admEventsTableBody');
+  if (!tbody) return;
+
+  if (events.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No events created yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = events.map(ev => {
+    const isPub = ev.status === 'published';
+    const cats = (ev.ticketTypes || []).map(t => `${t.name} (${formatNaira(t.price)})`).join(', ');
+
+    return `
+      <tr>
+        <td>
+          <div style="font-weight: 700; color: #FFF;">${ev.id}</div>
+          <div style="font-size: 0.76rem; color: var(--accent-blue-light); font-family: var(--font-mono);">${ev.slug}</div>
+        </td>
+        <td><strong>${ev.title}</strong></td>
+        <td>
+          <div>${ev.creatorName || '-'}</div>
+          <div style="font-size: 0.76rem; color: var(--text-muted);">${ev.creatorEmail || ''}</div>
+        </td>
+        <td>${ev.date} ${ev.time || ''}</td>
+        <td><span style="font-size: 0.85rem; color: var(--text-secondary);">${ev.venue}</span></td>
+        <td style="max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem;">
+          ${cats || 'None'}
+        </td>
+        <td>
+          <span class="badge badge-${isPub ? 'success' : 'warning'}">${isPub ? 'PUBLISHED' : 'DRAFT'}</span>
+        </td>
+        <td>
+          <button class="btn btn-outline btn-sm" style="color: var(--status-error); border-color: rgba(239, 68, 68, 0.4); padding: 4px 10px; font-size: 0.78rem;" onclick="adminDeleteEvent('${ev.id}', '${ev.title.replace(/'/g, "\\'")}')">
+            <i class="fa-solid fa-trash-can"></i> Delete
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+async function adminDeleteEvent(eventId, eventTitle) {
+  if (!confirm(`Are you sure you want to delete event "${eventTitle}" (${eventId}) as administrator?\n\nThis will remove the event from public display and disable ticket sales.`)) {
+    return;
+  }
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/events/${eventId}`, {
+      method: 'DELETE'
+    });
+
+    if (ok && data.success) {
+      showAdminToast(data.message || 'Event deleted successfully.', 'success');
+      loadAdminEventsAnalytics();
+    } else {
+      showAdminToast(data.message || 'Failed to delete event.', 'error');
+    }
+  } catch (err) {
+    console.error('Admin delete event error:', err);
+    showAdminToast('Server error while deleting event.', 'error');
+  }
+}
+
+function filterAdminEventsTable() {
+  if (!AdminState.adminEventsData) return;
+  const q = document.getElementById('admEventsSearch').value.toLowerCase().trim();
+  const filtered = (AdminState.adminEventsData.events || []).filter(e =>
+    (e.title && e.title.toLowerCase().includes(q)) ||
+    (e.creatorName && e.creatorName.toLowerCase().includes(q)) ||
+    (e.id && e.id.toLowerCase().includes(q)) ||
+    (e.slug && e.slug.toLowerCase().includes(q))
+  );
+  renderAdminEventsTable(filtered);
+}
+
+function renderAdminWithdrawalsTable(withdrawals) {
+  const tbody = document.getElementById('admWithdrawalsTableBody');
+  if (!tbody) return;
+
+  if (withdrawals.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="12" style="text-align: center; color: var(--text-muted); padding: 30px;">No withdrawal requests recorded yet.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = withdrawals.map(w => {
+    let statusBadge = 'badge-info';
+    if (w.status === 'Successful') statusBadge = 'badge-success';
+    if (w.status === 'Failed') statusBadge = 'badge-error';
+
+    const amt = parseFloat(w.amount || 0);
+    const charge = parseFloat(w.charge || 20.00);
+    const providerFee = parseFloat(w.providerFee || 10.00);
+    const stampDuty = parseFloat(w.stampDuty !== undefined ? w.stampDuty : (amt >= 10000 ? 50.00 : 0.00));
+    
+    let profit = (charge - providerFee) + stampDuty;
+    if (w.profit !== undefined && w.profit !== null) {
+      const storedProfit = parseFloat(w.profit);
+      if (storedProfit >= profit) {
+        profit = storedProfit;
+      }
+    }
+    const profitDisplay = w.status === 'Successful' ? formatNaira(profit) : '₦0.00';
+
+    return `
+      <tr>
+        <td style="font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent-blue-light);">${w.id}</td>
+        <td><strong>${w.userFullName || '-'}</strong></td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: #FFF;">${formatNaira(w.amount)}</td>
+        <td style="color: var(--accent-emerald);">₦20.00</td>
+        <td style="color: ${stampDuty > 0 ? 'var(--status-warning)' : 'var(--text-muted)'}; font-weight: 600;">${formatNaira(stampDuty)}</td>
+        <td style="color: var(--status-warning);">₦10.00</td>
+        <td style="color: var(--accent-emerald); font-weight: 700;">${profitDisplay}</td>
+        <td>${w.bankName || w.bankCode}</td>
+        <td style="font-family: var(--font-mono);">${w.accountNumber}</td>
+        <td style="font-size: 0.8rem; color: var(--text-muted);">${w.narration || '-'}</td>
+        <td><span class="badge ${statusBadge}">${w.status.toUpperCase()}</span></td>
+        <td style="font-size: 0.78rem; color: var(--text-muted);">${formatDateTime(w.createdAt)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function filterAdminWithdrawalsTable() {
+  if (!AdminState.adminEventsData) return;
+  const q = document.getElementById('admWithdrawalsSearch').value.toLowerCase().trim();
+  const filtered = (AdminState.adminEventsData.withdrawals || []).filter(w =>
+    (w.userFullName && w.userFullName.toLowerCase().includes(q)) ||
+    (w.id && w.id.toLowerCase().includes(q)) ||
+    (w.accountNumber && w.accountNumber.includes(q)) ||
+    (w.bankName && w.bankName.toLowerCase().includes(q))
+  );
+  renderAdminWithdrawalsTable(filtered);
+}
+
+// ==========================================
+// ADMIN PAYMENTS & DEPOSITS MANAGEMENT
+// ==========================================
+
+async function loadAdminDeposits() {
+  const status = document.getElementById('adminDepositTableStatus')?.value || 'all';
+  const search = document.getElementById('adminDepositTableSearch')?.value.trim() || '';
+  const tbody = document.getElementById('adminDepositsTableBody');
+  if (!tbody) return;
+
+  tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading deposits ledger...</td></tr>`;
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/deposits?status=${status}&search=${encodeURIComponent(search)}&limit=100`);
+    if (!ok || !data.success) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--status-error); padding: 24px;">Failed to load deposits.</td></tr>`;
+      return;
+    }
+
+    const deposits = data.deposits || [];
+    if (deposits.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 30px;">No matching deposit records found.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = deposits.map(dep => {
+      let badgeClass = 'badge-success';
+      if (dep.status === 'Processing') badgeClass = 'badge-processing';
+      else if (dep.status === 'Pending') badgeClass = 'badge-warning';
+      else if (dep.status === 'Failed') badgeClass = 'badge-danger';
+      else if (dep.status === 'Cancelled') badgeClass = 'badge-cancelled';
+
+      const ref = dep.providerReference || dep.paystackReference || dep.reference || dep.id;
+      const credited = dep.credited === true || (dep.status === 'Successful' && dep.credited !== false);
+
+      return `
+        <tr>
+          <td><code style="color: var(--accent-blue-light); font-size: 0.8rem;">${ref}</code></td>
+          <td>
+            <div style="font-weight: 600; color: #FFF;">${dep.userFullName || 'User'}</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">${dep.userEmail || '-'}</div>
+          </td>
+          <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">
+            ${formatNaira(dep.amount)}
+          </td>
+          <td style="text-transform: capitalize; font-size: 0.82rem; color: var(--text-muted);">
+            ${dep.channel || 'Paystack'}
+          </td>
+          <td><span class="badge ${badgeClass}">${dep.status}</span></td>
+          <td>
+            ${credited
+              ? '<span class="badge badge-success" style="font-size: 0.72rem;"><i class="fa-solid fa-check"></i> YES</span>'
+              : '<span class="badge badge-warning" style="font-size: 0.72rem;">NO</span>'
+            }
+          </td>
+          <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(dep.createdAt)}</td>
+          <td>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" onclick="quickLookupAdminDeposit('${ref}')" title="Lookup & Live Verify">
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </button>
+              ${!credited && dep.status !== 'Cancelled' ? `
+              <button class="btn btn-primary btn-sm" onclick="reconcileAdminDeposit('${ref}')" title="Reconcile & Credit Wallet">
+                <i class="fa-solid fa-check-double"></i>
+              </button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    console.error('loadAdminDeposits Error:', err);
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--status-error); padding: 24px;">Error connecting to deposits server.</td></tr>`;
+  }
+}
+
+window.quickLookupAdminDeposit = function(ref) {
+  const input = document.getElementById('adminDepositLookupInput');
+  if (input) input.value = ref;
+  lookupAdminDeposit(ref);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+async function lookupAdminDeposit(query) {
+  const resBox = document.getElementById('adminDepositLookupResult');
+  if (!resBox) return;
+
+  resBox.style.display = 'block';
+  resBox.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Checking local records and live Paystack status...</div>`;
+
+  try {
+    const { ok, data } = await adminFetch(`/admin/deposits/lookup?query=${encodeURIComponent(query)}`);
+    if (!ok || !data.success) {
+      resBox.innerHTML = `<div style="color: var(--status-error); padding: 14px;"><i class="fa-solid fa-circle-exclamation"></i> ${data.message || 'Lookup failed'}</div>`;
+      return;
+    }
+
+    const { transaction, user, livePaystack, paystackError, walletCredited, recommendation } = data;
+    const refToReconcile = transaction ? (transaction.providerReference || transaction.paystackReference || transaction.id) : (livePaystack ? query : null);
+
+    let bannerColor = 'rgba(59, 130, 246, 0.15)';
+    let bannerBorder = 'rgba(59, 130, 246, 0.4)';
+    let bannerText = '#60a5fa';
+
+    if (livePaystack && livePaystack.status === 'success') {
+      if (walletCredited) {
+        bannerColor = 'rgba(16, 185, 129, 0.15)';
+        bannerBorder = 'rgba(16, 185, 129, 0.4)';
+        bannerText = 'var(--accent-emerald)';
+      } else {
+        bannerColor = 'rgba(245, 158, 11, 0.15)';
+        bannerBorder = 'rgba(245, 158, 11, 0.4)';
+        bannerText = 'var(--status-warning)';
+      }
+    } else if (livePaystack && livePaystack.status === 'failed') {
+      bannerColor = 'rgba(239, 68, 68, 0.15)';
+      bannerBorder = 'rgba(239, 68, 68, 0.4)';
+      bannerText = 'var(--status-error)';
+    }
+
+    resBox.innerHTML = `
+      <!-- Status Recommendation Banner -->
+      <div style="background: ${bannerColor}; border: 1px solid ${bannerBorder}; color: ${bannerText}; border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <i class="fa-solid fa-shield-halved"></i> <span>${recommendation}</span>
+        </div>
+        ${(livePaystack && livePaystack.status === 'success' && !walletCredited && refToReconcile) ? `
+        <button class="btn btn-primary btn-sm" onclick="reconcileAdminDeposit('${refToReconcile}')">
+          <i class="fa-solid fa-check-double"></i> Reconcile & Credit Wallet (₦${livePaystack.amount})
+        </button>` : ''}
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px;">
+        <!-- User Information -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--accent-blue-light); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-user"></i> Customer Account
+          </h4>
+          ${user ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Name:</span> <strong>${user.fullName || '-'}</strong></div>
+              <div><span style="color: var(--text-muted);">Email:</span> <code>${user.email}</code></div>
+              <div><span style="color: var(--text-muted);">Phone:</span> ${user.phone || '-'}</div>
+              <div><span style="color: var(--text-muted);">Current Balance:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(user.walletBalance)}</strong></div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">No matching registered user linked to this search.</p>`}
+        </div>
+
+        <!-- Local STRICTWALLET Record -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--accent-emerald); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-database"></i> STRICTWALLET Database Record
+          </h4>
+          ${transaction ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Tx ID:</span> <code>${transaction.id}</code></div>
+              <div><span style="color: var(--text-muted);">Reference:</span> <code style="color: #FFF;">${transaction.providerReference || transaction.reference}</code></div>
+              <div><span style="color: var(--text-muted);">Amount:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(transaction.amount)}</strong></div>
+              <div><span style="color: var(--text-muted);">Status:</span> <span class="badge ${transaction.status === 'Successful' ? 'badge-success' : transaction.status === 'Pending' ? 'badge-warning' : 'badge-danger'}">${transaction.status}</span></div>
+              <div><span style="color: var(--text-muted);">Wallet Credited:</span> <strong>${walletCredited ? '<span style="color: var(--accent-emerald);">YES</span>' : '<span style="color: var(--status-warning);">NO</span>'}</strong></div>
+              <div><span style="color: var(--text-muted);">Created:</span> ${formatDateTime(transaction.createdAt)}</div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">No transaction record found in local database for this reference.</p>`}
+        </div>
+
+        <!-- Live Paystack Verification -->
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 14px;">
+          <h4 style="font-size: 0.85rem; color: var(--status-warning); text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">
+            <i class="fa-solid fa-satellite-dish"></i> Live Paystack API Status
+          </h4>
+          ${livePaystack ? `
+            <div style="display: flex; flex-direction: column; gap: 6px; font-size: 0.86rem;">
+              <div><span style="color: var(--text-muted);">Gateway Status:</span> <strong style="text-transform: uppercase; color: ${livePaystack.status === 'success' ? 'var(--accent-emerald)' : 'var(--status-error)'};">${livePaystack.status}</strong></div>
+              <div><span style="color: var(--text-muted);">Net Amount:</span> <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(livePaystack.amount)}</strong></div>
+              <div><span style="color: var(--text-muted);">Charged Total:</span> ${formatNaira(livePaystack.chargedAmount)} (Fee: ${formatNaira(livePaystack.fee)})</div>
+              <div><span style="color: var(--text-muted);">Channel:</span> <span style="text-transform: capitalize;">${livePaystack.channel}</span> ${livePaystack.cardType ? `(${livePaystack.cardType})` : ''} ${livePaystack.bank ? `- ${livePaystack.bank}` : ''}</div>
+              <div><span style="color: var(--text-muted);">Gateway Response:</span> <em>${livePaystack.gatewayResponse || 'N/A'}</em></div>
+              <div><span style="color: var(--text-muted);">Paid At:</span> ${livePaystack.paidAt ? formatDateTime(livePaystack.paidAt) : 'N/A'}</div>
+            </div>
+          ` : `<p style="color: var(--text-muted); font-size: 0.86rem;">${paystackError || 'No live record on Paystack.'}</p>`}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error('lookupAdminDeposit Error:', err);
+    resBox.innerHTML = `<div style="color: var(--status-error); padding: 14px;">Error communicating with lookup service.</div>`;
+  }
+}
+
+window.reconcileAdminDeposit = async function(reference) {
+  if (!reference) return;
+  if (!confirm(`Reconcile and credit wallet for transaction reference "${reference}"? This action is idempotent and safe.`)) {
+    return;
+  }
+
+  showAdminToast('Initiating safe payment reconciliation...', 'info');
+
+  try {
+    const { ok, data } = await adminFetch('/admin/deposits/reconcile', {
+      method: 'POST',
+      body: JSON.stringify({ reference })
+    });
+
+    if (ok && data.success) {
+      if (data.alreadyCredited) {
+        showAdminToast(`Reference ${reference} has already been credited. No duplicate credit applied.`, 'warning');
+      } else if (data.credited) {
+        showAdminToast(`Payment successfully reconciled! Wallet credited with new balance: ${formatNaira(data.newBalance)}`, 'success');
+      } else {
+        showAdminToast(data.message || 'Payment reconciled.', 'info');
+      }
+      lookupAdminDeposit(reference);
+      loadAdminDeposits();
+    } else {
+      showAdminToast(data?.message || 'Reconciliation failed.', 'error');
+    }
+  } catch (err) {
+    console.error('reconcileAdminDeposit Error:', err);
+    showAdminToast('Error during reconciliation: ' + err.message, 'error');
+  }
+};
+
+// -------------------------------------------------------------
+// SMS ALERT REVENUE & AUDIT LEDGER
+// -------------------------------------------------------------
+function escapeAdminHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+window.loadAdminSmsRevenue = async function() {
+  const tbody = document.getElementById('admSmsTableBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading SMS revenue and audit records...</td></tr>';
+  }
+
+  try {
+    const { ok, data } = await adminFetch('/admin/sms-revenue');
+    if (!ok || !data.success) {
+      showAdminToast(data?.message || 'Failed to fetch SMS revenue records.', 'error');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--status-error);">${escapeAdminHtml(data?.message || 'Failed to load SMS audit records.')}</td></tr>`;
+      }
+      return;
+    }
+
+    const { summary, alerts } = data;
+
+    // Update metric cards
+    const totalSentEl = document.getElementById('admSmsTotalSent');
+    const totalRevEl = document.getElementById('admSmsTotalRevenue');
+    const totalCostEl = document.getElementById('admSmsTotalCost');
+    const totalProfitEl = document.getElementById('admSmsTotalProfit');
+
+    if (totalSentEl) totalSentEl.innerText = (summary?.totalSmsSent || 0).toLocaleString();
+    if (totalRevEl) totalRevEl.innerText = formatNaira(summary?.totalSmsRevenue || 0);
+    if (totalCostEl) totalCostEl.innerText = formatNaira(summary?.totalProviderCost || 0);
+    if (totalProfitEl) totalProfitEl.innerText = formatNaira(summary?.totalGrossProfit || 0);
+
+    if (!alerts || alerts.length === 0) {
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);">No transactional SMS alerts recorded in the system yet.</td></tr>';
+      }
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = alerts.map(a => {
+        const isSuccess = a.status === 'sent';
+        const statusBadge = isSuccess
+          ? '<span class="badge badge-success"><i class="fa-solid fa-check"></i> Sent</span>'
+          : `<span class="badge badge-danger">${escapeAdminHtml(a.status || 'Failed')}</span>`;
+
+        const typeBadge = a.alertType === 'credit'
+          ? '<span class="badge" style="background: rgba(0, 208, 156, 0.15); color: #00D09C;"><i class="fa-solid fa-arrow-down"></i> Credit</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;"><i class="fa-solid fa-arrow-up"></i> Debit</span>';
+
+        return `
+          <tr>
+            <td style="font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;">
+              ${escapeAdminHtml(a.reference || a.id || '-')}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: #FFF;">${escapeAdminHtml(a.userPhone || a.phone || '-')}</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">User: ${escapeAdminHtml(a.userId || '-')}</div>
+            </td>
+            <td>${typeBadge}</td>
+            <td style="font-family: var(--font-mono); font-weight: 600;">${formatNaira(a.amount || 0)}</td>
+            <td style="font-family: var(--font-mono);">${formatNaira(a.userBalance || 0)}</td>
+            <td style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 700;">${formatNaira(a.customerCharge || 0)}</td>
+            <td style="font-family: var(--font-mono); color: #f87171;">${formatNaira(a.providerCost || 0)}</td>
+            <td style="font-family: var(--font-mono); color: #60a5fa; font-weight: 700;">+${formatNaira(a.grossProfit || 0)}</td>
+            <td>${statusBadge}</td>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(a.createdAt)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('loadAdminSmsRevenue Error:', err);
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--status-error);">Connection error loading SMS records.</td></tr>';
+    }
+  }
+};
+
+
