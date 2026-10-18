@@ -2,20 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>STRICTWALLET — Accessible. Secure. In Control.</title>
-  <meta name="description" content="STRICTWALLET is a digital wallet platform for airtime purchase, data bundles, dedicated virtual bank accounts, and seamless automated funding.">
+  <title>STRICTWALLET — Accessible. Secure. In Control. | Telecoms & Event Ticketing</title>
+  <meta name="description" content="STRICTWALLET is a digital wallet platform in Nigeria for instant airtime, affordable data bundles, dedicated virtual bank accounts, and complete event ticketing and creator payouts.">
+  <link rel="canonical" href="https://strictwallet.com.ng/">
+
+  <!-- Open Graph / SEO -->
+  <meta property="og:title" content="STRICTWALLET — Accessible. Secure. In Control.">
+  <meta property="og:description" content="Instant airtime, wholesale data bundles, and all-in-one event creation & ticketing in Nigeria.">
+  <meta property="og:url" content="https://strictwallet.com.ng/">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://strictwallet.com.ng/Image.png">
   
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="Image.png">
-  <link rel="apple-touch-icon" href="Image.png">
+  <link rel="icon" type="image/png" href="/Image.png">
+  <link rel="apple-touch-icon" href="/Image.png">
 
   <!-- Google Fonts & FontAwesome -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <!-- PWA Web App Manifest & Mobile Meta -->
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#00D09C">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,8 +34,14 @@
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
+  <!-- QR Code & Scanner & PDF Libraries for Event Ticketing -->
+  <script src="/qrcode.min.js"></script>
+  <script>if(!window.QRCode){document.write('<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"><\/script>');}</script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
@@ -36,18 +51,54 @@
   <!-- ================= AUTHENTICATION MODALS / VIEWS ================= -->
   <div id="authWrapper" class="auth-wrapper">
     
+    <!-- Public Header Navigation -->
+    <header class="public-header" style="width: 100%; border-radius: var(--radius-lg); margin-bottom: 24px;">
+      <nav class="public-nav">
+        <a href="/" class="public-brand">
+          <img src="/Image.png" alt="STRICTWALLET Logo">
+          <div class="public-brand-text">
+            <span class="public-brand-title">STRICTWALLET</span>
+            <span class="public-brand-motto">Accessible. Secure. In Control.</span>
+          </div>
+        </a>
+
+        <button class="public-mobile-toggle" onclick="document.querySelector('#homeNavLinks').classList.toggle('open')" aria-label="Toggle navigation">
+          <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <ul class="public-nav-links" id="homeNavLinks">
+          <li><a href="/" class="active">Home</a></li>
+          <li><a href="/services">Services</a></li>
+          <li><a href="/how-it-works">How It Works</a></li>
+          <li><a href="/event-ticketing">Event Ticketing</a></li>
+          <li><a href="/data-airtime">Data & Airtime</a></li>
+          <li><a href="/pricing">Pricing</a></li>
+          <li><a href="/about">About Us</a></li>
+          <li><a href="/contact">Contact</a></li>
+        </ul>
+
+        <div class="public-nav-actions">
+          <button type="button" class="btn btn-outline btn-sm" onclick="showAuthScreen('loginCard')">Sign In</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="showAuthScreen('registerCard')">Get Started</button>
+        </div>
+      </nav>
+    </header>
+
     <!-- 1. LOGIN CARD -->
     <div id="loginCard" class="auth-card">
       <div class="auth-header">
-        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <img src="/Image.png" alt="STRICTWALLET" class="auth-logo">
         <h2>Welcome Back</h2>
         <p class="auth-tagline">Accessible. Secure. In Control.</p>
       </div>
 
+      <!-- Shared Event/Ticket Invitation Notice -->
+      <div id="authSharedBanner" class="auth-shared-banner" style="display: none;"></div>
+
       <form id="loginForm">
         <div class="form-group">
-          <label class="form-label" for="loginEmail">Email Address</label>
-          <input type="email" id="loginEmail" placeholder="e.g. yourname@example.com" required autocomplete="email">
+          <label class="form-label" for="loginEmail">Email Address or Phone Number</label>
+          <input type="text" id="loginEmail" placeholder="e.g. yourname@example.com or 08012345678" required autocomplete="username">
         </div>
 
         <div class="form-group">
@@ -82,15 +133,24 @@
     <!-- 2. REGISTRATION CARD -->
     <div id="registerCard" class="auth-card" style="display: none; max-width: 540px;">
       <div class="auth-header">
-        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <img src="/Image.png" alt="STRICTWALLET" class="auth-logo">
         <h2>Create STRICTWALLET Account</h2>
         <p class="auth-tagline">Open your dedicated funding account & wallet</p>
       </div>
 
+      <!-- Shared Event/Ticket Invitation Notice -->
+      <div id="regSharedBanner" class="auth-shared-banner" style="display: none;"></div>
+
       <form id="registerForm">
-        <div class="form-group">
-          <label class="form-label" for="regFullName">Full Name</label>
-          <input type="text" id="regFullName" placeholder="e.g. Chukwuemeka Adeyemi" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="regFirstName">First Name</label>
+            <input type="text" id="regFirstName" placeholder="e.g. Chukwuemeka" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regLastName">Last Name</label>
+            <input type="text" id="regLastName" placeholder="e.g. Adeyemi" required>
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
@@ -168,7 +228,7 @@
     <!-- 3. FORGOT PASSWORD / RECOVERY CARD -->
     <div id="recoveryCard" class="auth-card" style="display: none;">
       <div class="auth-header">
-        <img src="Image.png" alt="STRICTWALLET" class="auth-logo">
+        <img src="/Image.png" alt="STRICTWALLET" class="auth-logo">
         <h2>Password Recovery</h2>
         <p class="auth-tagline">Verify your security information</p>
       </div>
@@ -176,8 +236,8 @@
       <!-- Step 1: Security Verification -->
       <form id="recoveryVerifyForm">
         <div class="form-group">
-          <label class="form-label" for="recEmail">Registered Email Address</label>
-          <input type="email" id="recEmail" placeholder="you@email.com" required>
+          <label class="form-label" for="recEmail">Registered Email or Phone Number</label>
+          <input type="text" id="recEmail" placeholder="you@email.com or 08012345678" required>
         </div>
 
         <div class="form-group">
@@ -223,6 +283,38 @@
         Remember your password? <a href="#" id="toLoginFromRecLink" style="font-weight: 700;">Back to Sign In</a>
       </div>
     </div>
+
+    <!-- Public Overview Showcase Banner -->
+    <section class="public-home-showcase" style="width: 100%; max-width: 900px; margin: 30px auto 16px; text-align: center;">
+      <div style="background: rgba(17, 27, 54, 0.75); border: 1px solid var(--border-color); border-radius: var(--radius-xl); padding: 30px 24px; box-shadow: var(--shadow-md);">
+        <h1 style="font-size: 1.45rem; color: #FFF; margin-bottom: 8px;">
+          STRICTWALLET — <span style="color: var(--accent-emerald);">Accessible. Secure. In Control.</span>
+        </h1>
+        <p style="color: var(--text-secondary); font-size: 0.92rem; max-width: 720px; margin: 0 auto 20px; line-height: 1.6;">
+          Your trusted digital platform in Nigeria for automated mobile data bundles, instant airtime top-ups, secure Paystack wallet funding, and comprehensive event creation with anti-fraud QR ticket scanning and direct bank withdrawals.
+        </p>
+        
+        <div style="display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+          <a href="/services" class="btn btn-outline btn-sm"><i class="fa-solid fa-list-check"></i> What We Offer</a>
+          <a href="/how-it-works" class="btn btn-outline btn-sm"><i class="fa-solid fa-route"></i> How It Works</a>
+          <a href="/event-ticketing" class="btn btn-outline btn-sm"><i class="fa-solid fa-ticket"></i> Event Ticketing</a>
+          <a href="/data-airtime" class="btn btn-outline btn-sm"><i class="fa-solid fa-wifi"></i> Data & Airtime</a>
+          <a href="/pricing" class="btn btn-outline btn-sm"><i class="fa-solid fa-tags"></i> Pricing & Fees</a>
+          <a href="/about" class="btn btn-outline btn-sm"><i class="fa-solid fa-circle-info"></i> About Us</a>
+          <a href="/contact" class="btn btn-outline btn-sm"><i class="fa-solid fa-headset"></i> Contact Support</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Public Footer Links on Auth View -->
+    <footer style="width: 100%; max-width: 900px; margin: 10px auto 0; padding-top: 18px; border-top: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 0.82rem; color: var(--text-muted);">
+      <div>&copy; 2026 STRICTWALLET. All rights reserved.</div>
+      <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+        <a href="/terms" style="color: var(--text-secondary); text-decoration: none;">Terms & Conditions</a>
+        <a href="/privacy" style="color: var(--text-secondary); text-decoration: none;">Privacy Policy</a>
+        <a href="/contact" style="color: var(--text-secondary); text-decoration: none;">Contact Us</a>
+      </div>
+    </footer>
   </div>
 
   <!-- ================= MAIN APPLICATION DASHBOARD ================= -->
@@ -231,7 +323,7 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
-        <img src="Image.png" alt="STRICTWALLET" class="brand-logo">
+        <img src="/Image.png" alt="STRICTWALLET" class="brand-logo">
         <span class="brand-title">STRICTWALLET</span>
         <span class="brand-badge">WALLET</span>
         <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close menu">
@@ -255,6 +347,10 @@
         <div class="nav-item" data-view="viewTransactions">
           <i class="fa-solid fa-list-check"></i>
           <span>Wallet / Transactions</span>
+        </div>
+        <div class="nav-item" data-view="viewEvents">
+          <i class="fa-solid fa-calendar-days"></i>
+          <span>Events</span>
         </div>
         <div class="nav-item" data-view="viewSupport">
           <i class="fa-solid fa-headset"></i>
@@ -320,6 +416,9 @@
         <!-- ================= 1. DASHBOARD VIEW ================= -->
         <section id="viewDashboard" class="view-section active-view">
           
+          <!-- Active Pending Deposit Alert Banner -->
+          <div id="activePendingDepositBanner" style="display: none; margin-bottom: 20px;"></div>
+
           <div class="grid-cards-2">
             
             <!-- Hero Wallet Balance Card -->
@@ -348,7 +447,84 @@
               </div>
             </div>
 
-            <!-- Virtual account logic removed, using direct Paystack funding modal -->
+            <!-- Sterling Bank Virtual Account Card -->
+            <div class="card" id="sterlingAccountCard" style="display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
+              <!-- Decorative subtle background badge -->
+              <div style="position: absolute; right: -15px; bottom: -20px; font-size: 7rem; opacity: 0.04; color: var(--accent-emerald); pointer-events: none;">
+                <i class="fa-solid fa-building-columns"></i>
+              </div>
+
+              <!-- State A: Account Not Yet Generated (Eligible Existing Users) -->
+              <div id="sterlingAccountNotGenerated" style="display: none; height: 100%; flex-direction: column; justify-content: space-between; gap: 14px;">
+                <div class="card-header" style="padding: 0; margin-bottom: 0;">
+                  <div>
+                    <h3 class="card-title" style="font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                      <i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> Sterling Bank Account
+                    </h3>
+                    <p class="card-subtitle" style="margin-top: 4px;">Get your permanent virtual bank account for automated wallet funding</p>
+                  </div>
+                  <div class="card-icon-badge emerald">
+                    <i class="fa-solid fa-bolt"></i>
+                  </div>
+                </div>
+
+                <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                  Fund your STRICTWALLET wallet directly by bank transfer from any Nigerian banking app or USSD using a dedicated Sterling Bank virtual account assigned to your name.
+                </p>
+
+                <div>
+                  <button class="btn btn-primary" id="btnGenerateVirtualAccount" onclick="generateSterlingVirtualAccount()" style="width: 100%; justify-content: center;">
+                    <i class="fa-solid fa-plus-circle"></i> GENERATE VIRTUAL ACCOUNT
+                  </button>
+                  <div id="generateAccountErrorMsg" style="display: none; margin-top: 8px; font-size: 0.82rem; color: var(--accent-red); line-height: 1.4;"></div>
+                </div>
+              </div>
+
+              <!-- State B: Account Active & Assigned -->
+              <div id="sterlingAccountActive" style="display: none; flex-direction: column; gap: 12px;">
+                <div class="card-header" style="padding: 0; margin-bottom: 0;">
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span style="font-size: 0.72rem; font-weight: 700; color: var(--accent-emerald); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0, 208, 156, 0.12); padding: 3px 8px; border-radius: 4px;">Automated Bank Funding</span>
+                    </div>
+                    <h3 class="card-title" style="font-size: 1.08rem; margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                      <i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> <span id="sterlingBankNameDisplay">Sterling Bank</span>
+                    </h3>
+                  </div>
+                  <div class="card-icon-badge emerald">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                </div>
+
+                <!-- Account Number & Copy Button -->
+                <div style="background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;">
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Account Number</div>
+                    <div id="sterlingAccountNumberDisplay" style="font-family: var(--font-mono); font-size: 1.35rem; font-weight: 800; color: #FFF; letter-spacing: 0.05em; margin-top: 2px;">
+                      ----------
+                    </div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" id="btnCopySterlingAccount" onclick="copySterlingAccountNumber()" title="Copy Account Number" style="padding: 8px 12px; gap: 6px;">
+                    <i class="fa-regular fa-copy" id="copySterlingIcon"></i> <span id="copySterlingText">Copy</span>
+                  </button>
+                </div>
+
+                <!-- Account Holder Name -->
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.84rem; padding: 0 4px;">
+                  <span style="color: var(--text-muted);">Account Name:</span>
+                  <strong id="sterlingAccountNameDisplay" style="color: #FFF; text-align: right;">--</strong>
+                </div>
+
+                <!-- Instruction & Fee Notice -->
+                <div style="background: rgba(0, 208, 156, 0.06); border-left: 3px solid var(--accent-emerald); padding: 8px 12px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;">
+                  <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0; line-height: 1.45;">
+                    <i class="fa-solid fa-circle-info" style="color: var(--accent-emerald); margin-right: 4px;"></i>
+                    Transfer money into this account from any bank app or USSD to fund your STRICTWALLET wallet. (₦25 fee charged per incoming transfer).
+                  </p>
+                </div>
+              </div>
+
+            </div>
 
           </div>
 
@@ -614,8 +790,10 @@
                 <select id="txFilterStatus" style="width: 140px; padding: 8px 12px;">
                   <option value="all">All Statuses</option>
                   <option value="Successful">Successful</option>
+                  <option value="Processing">Processing</option>
                   <option value="Pending">Pending</option>
                   <option value="Failed">Failed</option>
+                  <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
             </div>
@@ -624,13 +802,13 @@
               <table class="table-custom">
                 <thead>
                   <tr>
-                    <th>Tx ID</th>
+                    <th>Reference</th>
                     <th>Type</th>
-                    <th>Recipient / Account</th>
+                    <th>Channel / Details</th>
                     <th>Amount</th>
                     <th>Date & Time</th>
                     <th>Status</th>
-                    <th>Receipt</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody id="allTransactionsTableBody">
@@ -682,8 +860,172 @@
           </div>
         </section>
 
-        <!-- ================= 6. SETTINGS VIEW ================= -->
+        <!-- ================= 6. EVENTS MARKETPLACE & TICKETING VIEW ================= -->
+        <section id="viewEvents" class="view-section">
+          <div class="events-header-bar">
+            <div class="events-nav-tabs">
+              <button class="event-tab-btn active" id="tabBtnDiscover" onclick="switchEventTab('discover')">
+                <i class="fa-solid fa-compass"></i> Discover Events
+              </button>
+              <button class="event-tab-btn" id="tabBtnMyEvents" onclick="switchEventTab('my-events')">
+                <i class="fa-solid fa-calendar-check"></i> My Organized Events
+              </button>
+              <button class="event-tab-btn" id="tabBtnMyTickets" onclick="switchEventTab('my-tickets')">
+                <i class="fa-solid fa-ticket"></i> My Tickets
+              </button>
+            </div>
+
+            <button class="btn btn-primary" id="btnOpenCreateEvent" onclick="openCreateEventModal()">
+              <i class="fa-solid fa-plus"></i> Create Event
+            </button>
+          </div>
+
+          <!-- TAB 1: DISCOVER EVENTS -->
+          <div id="eventsTabDiscover">
+            <div style="display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 240px; position: relative;">
+                <input type="text" id="searchEventsInput" placeholder="Search events by title, venue, or keyword..." style="padding-left: 38px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted);"></i>
+              </div>
+              <button class="btn btn-secondary" onclick="loadMarketplaceEvents()">
+                <i class="fa-solid fa-rotate"></i> Refresh
+              </button>
+            </div>
+
+            <!-- Events Grid -->
+            <div class="events-grid" id="eventsGridContainer">
+              <!-- Dynamically populated by JS -->
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-events-state" id="eventsEmptyState" style="display: none;">
+              <i class="fa-regular fa-calendar-xmark"></i>
+              <h3>No events available at the moment.</h3>
+              <p>Check back soon or become an Event Creator and publish your own experience today!</p>
+              <button class="btn btn-primary" onclick="openCreateEventModal()">
+                <i class="fa-solid fa-plus"></i> Create Event
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 2: MY ORGANIZED EVENTS -->
+          <div id="eventsTabMyEvents" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 1.15rem; color: #FFF; margin-bottom: 4px;">Event Creator Dashboard</h3>
+                <p style="font-size: 0.82rem; color: var(--text-secondary);">Manage your published experiences, attendee lists, ticket check-in, and sales.</p>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn btn-outline btn-sm" onclick="navigateToView('viewSettings'); scrollToCreatorTransactions();">
+                  <i class="fa-solid fa-wallet"></i> Creator Wallet & History
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="loadMyOrganizedEvents()">
+                  <i class="fa-solid fa-rotate"></i> Refresh My Events
+                </button>
+              </div>
+            </div>
+
+            <div class="events-grid" id="myEventsGridContainer">
+              <!-- Dynamically populated by JS -->
+            </div>
+
+            <div class="empty-events-state" id="myEventsEmptyState" style="display: none;">
+              <i class="fa-solid fa-calendar-plus"></i>
+              <h3>You haven't created any events yet.</h3>
+              <p>Create and publish an event to sell tickets directly using STRICTWALLET.</p>
+              <button class="btn btn-primary" onclick="openCreateEventModal()">
+                <i class="fa-solid fa-plus"></i> Create Your First Event
+              </button>
+            </div>
+          </div>
+
+          <!-- TAB 3: MY TICKETS -->
+          <div id="eventsTabMyTickets" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 1.15rem; color: #FFF; margin-bottom: 4px;">My Purchased Tickets</h3>
+                <p style="font-size: 0.82rem; color: var(--text-secondary);">Access your personalized tickets with secure QR codes for event entry.</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="loadMyTickets()">
+                <i class="fa-solid fa-rotate"></i> Refresh Tickets
+              </button>
+            </div>
+
+            <div class="events-grid" id="myTicketsGridContainer">
+              <!-- Dynamically populated by JS -->
+            </div>
+
+            <div class="empty-events-state" id="myTicketsEmptyState" style="display: none;">
+              <i class="fa-solid fa-ticket-simple"></i>
+              <h3>You have not purchased any tickets yet.</h3>
+              <p>Browse our live marketplace to discover upcoming concerts, shows, and gatherings.</p>
+              <button class="btn btn-primary" onclick="switchEventTab('discover')">
+                <i class="fa-solid fa-compass"></i> Discover Events
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= 7. SETTINGS VIEW ================= -->
         <section id="viewSettings" class="view-section">
+          
+          <!-- Event Creator Wallet Card (Settings Integration) -->
+          <div class="organizer-wallet-box">
+            <div class="organizer-wallet-badge">
+              <i class="fa-solid fa-wallet"></i> EVENT CREATOR WALLET
+            </div>
+            <div style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 2px;">Available Balance</div>
+            <div class="organizer-wallet-balance" id="organizerWalletBalance">₦0.00</div>
+            <div class="organizer-wallet-subtext">Ticket Sales Earnings (after STRICTWALLET 3% commission)</div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <button class="btn btn-primary" id="btnOpenWithdrawalModal" onclick="openWithdrawalModal()">
+                <i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw
+              </button>
+              <button class="btn btn-outline" id="btnScrollToCreatorTx" onclick="scrollToCreatorTransactions()">
+                <i class="fa-solid fa-receipt"></i> Withdrawal History
+              </button>
+              <button class="btn btn-secondary" onclick="switchEventTab('my-events'); navigateToView('viewEvents');">
+                <i class="fa-solid fa-calendar-check"></i> View My Events
+              </button>
+            </div>
+          </div>
+
+          <!-- Event Creator Wallet Transactions & Withdrawal History Card -->
+          <div class="card" id="creatorWalletTxSection" style="margin-bottom: 24px;">
+            <div class="card-header" style="flex-wrap: wrap; gap: 12px; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-emerald);"></i>
+                  Event Creator Wallet Transactions
+                </h3>
+                <p class="card-subtitle">Complete transaction records and verified receipts of ticket payouts</p>
+              </div>
+              <button class="btn btn-outline btn-sm" onclick="loadOrganizerWallet(true)">
+                <i class="fa-solid fa-rotate"></i> Refresh History
+              </button>
+            </div>
+
+            <div class="table-responsive">
+              <table class="table-custom">
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Type</th>
+                    <th>Destination Bank</th>
+                    <th>Account</th>
+                    <th>Amount Sent</th>
+                    <th>Date & Time</th>
+                    <th>Status</th>
+                    <th>Receipt</th>
+                  </tr>
+                </thead>
+                <tbody id="creatorWithdrawalsTableBody">
+                  <!-- Dynamically Injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div class="grid-cards-2">
             
             <!-- User Profile Details -->
@@ -708,6 +1050,82 @@
               <div class="form-group">
                 <label class="form-label">Next of Kin (Recovery Question)</label>
                 <input type="text" id="setNextOfKin" readonly style="opacity: 0.8;">
+              </div>
+
+              <!-- Action Button for Eligible Old Users -->
+              <div id="settingsUpdateDetailsAction" style="display: none; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-primary btn-block" id="btnUpdateDetails" onclick="openUpdateDetailsForm()">
+                  <i class="fa-solid fa-user-pen"></i> Update Details
+                </button>
+              </div>
+
+              <!-- Update Name Details Form (Revealed when clicking Update Details) -->
+              <div id="settingsUpdateDetailsFormContainer" style="display: none; margin-top: 16px; background: rgba(13, 21, 45, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+                <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: var(--accent-emerald); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-user-pen"></i> Update Name Details
+                </h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
+                  Please provide your separate First Name and Last Name below. This will update your profile and allow you to generate your dedicated virtual account number.
+                </p>
+
+                <form id="updateNameDetailsForm" onsubmit="submitUpdateNameDetails(event)">
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="updateFirstName">First Name <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="updateFirstName" placeholder="e.g. Chukwuemeka" autocomplete="given-name" required>
+                    <div id="updateFirstNameError" style="display: none; color: #f87171; font-size: 0.75rem; margin-top: 4px;"></div>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="form-label" for="updateLastName">Last Name <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="updateLastName" placeholder="e.g. Adeyemi" autocomplete="family-name" required>
+                    <div id="updateLastNameError" style="display: none; color: #f87171; font-size: 0.75rem; margin-top: 4px;"></div>
+                  </div>
+
+                  <div id="updateNameGlobalError" style="display: none; color: #f87171; font-size: 0.82rem; margin-bottom: 14px; padding: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm);"></div>
+
+                  <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" id="btnSaveNameDetails" style="flex: 1; justify-content: center;">
+                      <i class="fa-solid fa-floppy-disk"></i> Save Details
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelUpdateDetailsForm()">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Post-Update Action: Generate Virtual Account Number -->
+              <div id="settingsVirtualAccountPrompt" style="display: none; margin-top: 18px; padding: 16px; background: rgba(0, 208, 156, 0.08); border: 1px solid rgba(0, 208, 156, 0.25); border-radius: var(--radius-md);">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                  <div style="color: var(--accent-emerald); font-size: 1.2rem; margin-top: 2px;"><i class="fa-solid fa-circle-check"></i></div>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 700; color: #fff; font-size: 0.95rem;">Name Details Saved</div>
+                    <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 4px 0 12px 0; line-height: 1.4;">
+                      Your First Name and Last Name have been saved. You can now generate your dedicated Sterling Bank virtual account number.
+                    </p>
+                    <button type="button" class="btn btn-primary btn-block" id="btnSettingsGenerateVirtualAccount" onclick="triggerVirtualAccountGenerationFromSettings()">
+                      <i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number
+                    </button>
+                    <div id="settingsVirtualAccountErrorMsg" style="display: none; margin-top: 8px; font-size: 0.82rem; color: var(--accent-red); line-height: 1.4;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Virtual Account Details in Settings (when assigned) -->
+              <div id="settingsVirtualAccountDisplay" style="display: none; margin-top: 18px; padding: 14px; background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: var(--accent-emerald); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+                  <i class="fa-solid fa-building-columns"></i> Dedicated Virtual Account
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Bank: <strong id="settingsBankNameDisplay" style="color: #fff;">Sterling Bank</strong></div>
+                    <div style="font-size: 1.15rem; font-weight: 800; letter-spacing: 0.05em; color: var(--accent-emerald); margin: 2px 0;" id="settingsAccountNumberDisplay">--</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Account Name: <span id="settingsAccountNameDisplay" style="color: #fff;">--</span></div>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="copySettingsVirtualAccount()">
+                    <i class="fa-regular fa-copy"></i> Copy
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -779,6 +1197,37 @@
             </div>
 
           </div>
+
+          <!-- Transactional SMS Alerts Settings Card -->
+          <div class="card" id="smsAlertSettingsCard" style="margin-top: 24px;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-comment-sms" style="color: var(--accent-blue-light);"></i> Transaction SMS Alerts
+                </h3>
+                <p class="card-subtitle">Receive transactional SMS alerts for your wallet transactions</p>
+              </div>
+              <div class="card-icon-badge blue"><i class="fa-solid fa-bell"></i></div>
+            </div>
+
+            <!-- Current Status & Toggle Control -->
+            <div style="background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Alert Preference</div>
+                <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;" id="smsAlertsStatusText">
+                  Transaction SMS Alerts: <span style="color: #f87171;" id="smsAlertsStatusVal">OFF</span>
+                </div>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px;">
+                  Registered Notification Phone: <strong id="smsAlertsPhoneDisplay" style="color: #fff;">--</strong>
+                </div>
+              </div>
+              <div>
+                <button type="button" class="btn btn-primary" id="btnToggleSmsAlerts" onclick="toggleSmsAlerts()">
+                  TURN ON
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
       </main>
@@ -814,6 +1263,10 @@
       <button class="mobile-nav-btn" data-view="viewTransactions">
         <i class="fa-solid fa-list-check"></i>
         <span>History</span>
+      </button>
+      <button class="mobile-nav-btn" data-view="viewEvents">
+        <i class="fa-solid fa-calendar-days"></i>
+        <span>Events</span>
       </button>
       <button class="mobile-nav-btn" data-view="viewSupport">
         <i class="fa-solid fa-headset"></i>
@@ -986,6 +1439,645 @@
     </div>
   </div>
 
+  <!-- 6B. PAYMENT STATUS MODAL (PAYSTACK DEPOSIT LIFECYCLE) -->
+  <div id="paymentStatusModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 440px; text-align: center;">
+      <div class="modal-header" style="justify-content: flex-end; border-bottom: none; padding-bottom: 0;">
+        <button class="modal-close-btn" onclick="closePaymentStatusModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="paymentStatusModalBody" style="padding-top: 0;">
+        <div id="paymentStatusSpinner" style="margin-bottom: 16px;">
+          <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 3rem; color: var(--accent-blue);"></i>
+        </div>
+        <h3 id="paymentStatusTitle" style="font-size: 1.25rem; font-weight: 700; margin-bottom: 8px; color: #FFF;">
+          Verifying Payment...
+        </h3>
+        <p id="paymentStatusDesc" style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 20px;">
+          Please wait while we confirm your transaction with Paystack.
+        </p>
+
+        <div id="paymentStatusDetailsCard" style="background: rgba(0, 0, 0, 0.35); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; text-align: left; margin-bottom: 20px; font-size: 0.85rem; display: none;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Amount:</span>
+            <strong id="psmAmount" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Reference:</span>
+            <code id="psmReference" style="color: #FFF; font-size: 0.8rem;">-</code>
+          </div>
+          <div style="display: flex; justify-content: space-between;">
+            <span style="color: var(--text-muted);">Status:</span>
+            <span id="psmBadge" class="badge badge-info">Processing</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;" id="paymentStatusActions">
+          <button type="button" class="btn btn-secondary" id="btnPsmClose" onclick="closePaymentStatusModal()" style="flex: 1; min-width: 100px;">
+            Dismiss
+          </button>
+          <button type="button" class="btn btn-primary" id="btnPsmRetry" style="display: none; flex: 1; min-width: 120px;" onclick="retryCheckPendingDeposit()">
+            <i class="fa-solid fa-rotate-right"></i> Check Again
+          </button>
+          <button type="button" class="btn btn-outline" id="btnPsmCancel" style="display: none; flex: 1; min-width: 120px; border-color: rgba(239, 68, 68, 0.4); color: #f87171;" onclick="cancelCurrentPendingDeposit()">
+            <i class="fa-solid fa-xmark"></i> Cancel Attempt
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= EVENT TICKETING SYSTEM MODALS ================= -->
+
+  <!-- 7. CREATE EVENT MODAL -->
+  <div id="createEventModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 680px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title"><i class="fa-solid fa-calendar-plus" style="color: var(--accent-emerald);"></i> Create Event</h3>
+          <p class="card-subtitle">Set up your event, upload banner & ticket artwork, and configure ticket types.</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('createEventModal')">&times;</button>
+      </div>
+      <form id="createEventForm" onsubmit="event.preventDefault();">
+        <div class="modal-body">
+          <input type="hidden" id="editEventId" value="">
+
+          <div class="form-group">
+            <label class="form-label" for="ceTitle">Event Name *</label>
+            <input type="text" id="ceTitle" placeholder="e.g. Alvan Night 2026 / Lagos AfroTech Gala" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ceDescription">Event Description / What's the event about? *</label>
+            <textarea id="ceDescription" rows="3" placeholder="Tell attendees what to expect, guest performers, schedule..." required></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="ceVenue">Event Venue *</label>
+            <input type="text" id="ceVenue" placeholder="e.g. Landmark Centre, Water Corporation Road, VI, Lagos" required>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="ceDate">Event Date *</label>
+              <input type="date" id="ceDate" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ceTime">Event Time *</label>
+              <input type="time" id="ceTime" required>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+            <div class="form-group">
+              <label class="form-label" for="ceSalesStart">Ticket Sales Start Date & Time</label>
+              <input type="datetime-local" id="ceSalesStart">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="ceSalesEnd">Ticket Sales End Date & Time</label>
+              <input type="datetime-local" id="ceSalesEnd">
+            </div>
+          </div>
+
+          <!-- Image Uploads with Cloudinary -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px;">
+            <!-- Event Banner -->
+            <div class="form-group">
+              <label class="form-label" for="ceBannerFile">
+                <i class="fa-solid fa-image" style="color: var(--accent-emerald);"></i> Event Banner / Picture
+              </label>
+              <input type="file" id="ceBannerFile" accept="image/*" style="font-size: 0.8rem;">
+              <input type="hidden" id="ceBannerUrl" value="">
+              <div id="ceBannerStatus" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Supports JPG, PNG, WEBP</div>
+              <div id="ceBannerPreviewWrap" style="margin-top: 6px; display: none;">
+                <img id="ceBannerPreview" src="" alt="Banner Preview" style="width: 100%; max-height: 100px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              </div>
+            </div>
+
+            <!-- Ticket Design Artwork -->
+            <div class="form-group">
+              <label class="form-label" for="ceDesignFile">
+                <i class="fa-solid fa-palette" style="color: var(--accent-blue-light);"></i> Ticket Design Upload
+              </label>
+              <input type="file" id="ceDesignFile" accept="image/*" style="font-size: 0.8rem;">
+              <input type="hidden" id="ceDesignUrl" value="">
+              <div id="ceDesignStatus" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Artwork used as ticket background</div>
+              <div id="ceDesignPreviewWrap" style="margin-top: 6px; display: none;">
+                <img id="ceDesignPreview" src="" alt="Ticket Artwork Preview" style="width: 100%; max-height: 100px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic Ticket Types Section -->
+          <div style="margin-top: 18px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <div>
+                <label class="form-label" style="margin-bottom: 2px;">
+                  <i class="fa-solid fa-tags" style="color: var(--accent-emerald);"></i> Ticket Types / Categories *
+                </label>
+                <div style="font-size: 0.75rem; color: var(--text-muted);">Add Regular, VIP, VVIP, Table for 4, etc.</div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnAddTicketTypeRow" onclick="addTicketTypeRow()">
+                <i class="fa-solid fa-plus"></i> Add Ticket Type
+              </button>
+            </div>
+
+            <div id="ticketTypesContainer">
+              <!-- Dynamically populated rows -->
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('createEventModal')">Cancel</button>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn btn-outline" id="btnSaveEventDraft" onclick="saveEvent(false)">
+              <i class="fa-regular fa-file"></i> Save Draft
+            </button>
+            <button type="button" class="btn btn-primary" id="btnPublishEvent" onclick="saveEvent(true)">
+              <i class="fa-solid fa-upload"></i> Publish Event
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 8. EVENT DETAILS & TICKET SELECTION MODAL -->
+  <div id="eventDetailsModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3 class="card-title" id="edModalTitle">Event Details</h3>
+        <button class="modal-close-btn" onclick="closeModal('eventDetailsModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Loading State Indicator -->
+        <div id="edLoadingState" style="display: none; text-align: center; padding: 50px 20px;">
+          <i class="fa-solid fa-spinner fa-spin fa-2x" style="color: var(--accent-emerald);"></i>
+          <p style="margin-top: 14px; color: var(--text-secondary); font-size: 0.95rem;">Loading event details...</p>
+        </div>
+
+        <!-- Event Content Container -->
+        <div id="edContentState">
+          <!-- Event Banner Header -->
+          <div id="edBannerWrap" style="width: 100%; height: 200px; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 16px; background: #060B19;">
+            <img id="edBannerImg" src="/Image.png" alt="Event Banner" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+
+          <h2 id="edTitle" style="font-size: 1.35rem; font-weight: 800; color: #FFF; margin-bottom: 8px;">Event Title</h2>
+
+          <!-- Event Metadata Badges -->
+          <div style="display: flex; flex-direction: column; gap: 8px; background: rgba(0, 0, 0, 0.25); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-location-dot" style="color: var(--accent-emerald); width: 16px;"></i>
+              <strong id="edVenue" style="color: #FFF;">Venue Location</strong>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-calendar-day" style="color: var(--accent-emerald); width: 16px;"></i>
+              <span id="edDateTime">Date & Time</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-muted);" id="edSalesPeriodRow">
+              <i class="fa-solid fa-clock" style="color: var(--accent-blue-light); width: 16px;"></i>
+              <span id="edSalesPeriod">Sales period info</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.82rem; color: var(--text-secondary);">
+              <i class="fa-solid fa-user-tie" style="color: var(--accent-purple); width: 16px;"></i>
+              <span>Organized by: <strong id="edCreatorName" style="color: #FFF;">Event Creator</strong></span>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div style="margin-bottom: 20px;">
+            <h4 style="font-size: 0.88rem; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.05em;">About this Event</h4>
+            <p id="edDescription" style="font-size: 0.9rem; color: #FFF; line-height: 1.5; white-space: pre-line;">Event description details...</p>
+          </div>
+
+          <!-- Shareable Event Link -->
+          <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: var(--radius-md); padding: 12px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82rem; color: var(--accent-blue-light);" id="edShareLinkText">
+              https://strictwallet.com/event/alvan-night
+            </div>
+            <button class="btn btn-outline btn-sm" id="btnCopyShareLink" onclick="copyEventShareLink()" style="padding: 4px 10px; font-size: 0.78rem;">
+              <i class="fa-regular fa-copy"></i> Copy Link
+            </button>
+          </div>
+
+          <!-- Available Ticket Types Selection -->
+          <div style="margin-bottom: 18px;">
+            <h4 style="font-size: 0.92rem; color: var(--accent-emerald); margin-bottom: 10px;">
+              <i class="fa-solid fa-ticket"></i> Select Ticket Type
+            </h4>
+            <div id="edTicketTypesList" style="display: flex; flex-direction: column; gap: 10px;">
+              <!-- Dynamically populated ticket options -->
+            </div>
+          </div>
+
+          <!-- Ticket Holder Full Name (Optional Field) -->
+          <div class="form-group" style="background: rgba(13, 21, 45, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px;">
+            <label class="form-label" for="ticketHolderFullName" style="display: flex; justify-content: space-between; align-items: center;">
+              <span><i class="fa-solid fa-user-tag"></i> Ticket Holder's Full Name</span>
+              <span style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: normal;">(Optional)</span>
+            </label>
+            <input type="text" id="ticketHolderFullName" placeholder="e.g. John Okoro (If buying for someone else)">
+            <div style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
+              * If left empty, your registered STRICTWALLET account name will automatically be assigned as the ticket holder.
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer" id="edModalFooter" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Total Price:</span>
+          <div id="edSelectedPriceDisplay" style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</div>
+        </div>
+        <button class="btn btn-primary" id="btnProceedTicketPurchase" onclick="initiateTicketPurchase()">
+          <i class="fa-solid fa-cart-shopping"></i> Purchase Ticket
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8b. EVENT NOT FOUND MODAL -->
+  <div id="eventNotFoundModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 460px; text-align: center;">
+      <div class="modal-header" style="justify-content: flex-end; border-bottom: none; padding-bottom: 0;">
+        <button class="modal-close-btn" onclick="closeEventNotFoundModal(true)">&times;</button>
+      </div>
+      <div class="modal-body" style="padding-top: 0; padding-bottom: 24px;">
+        <div style="width: 72px; height: 72px; border-radius: 50%; background: rgba(239, 68, 68, 0.12); border: 2px solid rgba(239, 68, 68, 0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px;">
+          <i class="fa-solid fa-calendar-xmark" style="font-size: 2.2rem; color: var(--status-error);"></i>
+        </div>
+        <h3 style="font-size: 1.3rem; font-weight: 800; color: #FFF; margin-bottom: 10px;">Event Not Found</h3>
+        <p id="eventNotFoundSlugMsg" style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 24px;">
+          The event you're looking for doesn't exist, has ended, or the link is invalid.
+        </p>
+        <div style="display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;">
+          <button type="button" class="btn btn-secondary" onclick="closeEventNotFoundModal(true)">
+            <i class="fa-solid fa-house"></i> Home
+          </button>
+          <button type="button" class="btn btn-primary" id="btnNotFoundExplore" onclick="handleNotFoundExplore()">
+            <i class="fa-solid fa-compass"></i> Explore Events
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. TICKET PURCHASE CONFIRMATION & PIN MODAL -->
+  <div id="eventPurchasePinModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 class="card-title">Authorize Ticket Purchase</h3>
+        <button class="modal-close-btn" onclick="closeModal('eventPurchasePinModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: rgba(0, 0, 0, 0.25); border-radius: var(--radius-md); padding: 16px; margin-bottom: 18px; border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Event:</span>
+            <strong id="purModalEventTitle" style="color: #FFF; font-size: 0.85rem; text-align: right;">Alvan Night 2026</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Ticket Type:</span>
+            <strong id="purModalTicketType" style="color: var(--accent-blue-light); font-size: 0.85rem;">VVIP</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Ticket Holder:</span>
+            <strong id="purModalTicketHolder" style="color: #FFF; font-size: 0.85rem;">John Okoro</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+            <span style="color: var(--text-muted); font-size: 0.85rem;">Amount:</span>
+            <strong id="purModalAmount" style="color: var(--accent-emerald); font-family: var(--font-mono); font-size: 1.15rem;">₦10,000.00</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 8px;">
+            <span style="color: var(--text-muted); font-size: 0.8rem;">Available Wallet Balance:</span>
+            <strong id="purModalWalletBalance" style="color: #FFF; font-family: var(--font-mono); font-size: 0.85rem;">₦15,000.00</strong>
+          </div>
+        </div>
+
+        <!-- Insufficient Balance Notification & Funding Option -->
+        <div id="purModalInsufficientAlert" style="display: none; background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; color: var(--status-error); font-weight: 700; font-size: 0.9rem; margin-bottom: 4px;">
+            <i class="fa-solid fa-circle-exclamation"></i> Insufficient Wallet Balance
+          </div>
+          <p id="purModalShortageText" style="font-size: 0.82rem; color: #FFF; margin-bottom: 12px; line-height: 1.45;">
+            Your wallet balance is lower than the ticket amount. Please fund your wallet to complete this purchase.
+          </p>
+          <button type="button" class="btn btn-primary btn-block btn-sm" id="btnPurModalFundWallet" onclick="openFundWalletFromTicketPurchase()">
+            <i class="fa-solid fa-wallet"></i> Fund Wallet to Complete Purchase
+          </button>
+        </div>
+
+        <div class="form-group" id="purModalPinGroup">
+          <label class="form-label" for="eventPurchasePin" style="color: var(--accent-emerald); font-weight: 700;">
+            <i class="fa-solid fa-lock"></i> Enter 4-Digit Transaction PIN
+          </label>
+          <input type="password" id="eventPurchasePin" maxlength="4" placeholder="••••" style="font-size: 1.3rem; letter-spacing: 0.3em; text-align: center;" required pattern="\d{4}">
+        </div>
+      </div>
+      <div class="modal-footer" id="purModalFooter">
+        <button class="btn btn-secondary" onclick="closeModal('eventPurchasePinModal')">Cancel</button>
+        <button class="btn btn-primary" id="btnConfirmEventPurchase" onclick="executeEventTicketPurchase()">
+          <i class="fa-solid fa-check"></i> Authorize & Pay
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. PAYMENT RECEIPT MODAL -->
+  <div id="eventReceiptModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 class="card-title"><i class="fa-solid fa-receipt" style="color: var(--accent-emerald);"></i> Payment Receipt</h3>
+        <button class="modal-close-btn" onclick="closeModal('eventReceiptModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="eventReceiptBody">
+        <!-- Injected dynamically by JS -->
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between;">
+        <button class="btn btn-secondary" onclick="closeModal('eventReceiptModal')">Close</button>
+        <button class="btn btn-primary" id="btnReceiptViewTicket" onclick="viewPurchasedTicketFromReceipt()">
+          <i class="fa-solid fa-ticket"></i> View Ticket
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 11. PERSONALIZED TICKET PRESENTATION & DOWNLOAD MODAL -->
+  <div id="personalizedTicketModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 580px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title"><i class="fa-solid fa-ticket" style="color: var(--accent-emerald);"></i> E-Ticket</h3>
+          <p class="card-subtitle" id="ptSubTitle">Personalized entry pass</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('personalizedTicketModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Rendered Ticket Canvas Container -->
+        <div class="personalized-ticket-wrap">
+          <div class="ticket-canvas-container" id="ticketCanvasContainer">
+            <canvas id="personalizedTicketCanvas" width="800" height="420"></canvas>
+          </div>
+        </div>
+
+        <!-- Ticket Summary Details -->
+        <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; font-size: 0.85rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Ticket ID:</span>
+            <strong id="ptTicketId" style="color: var(--accent-blue-light); font-family: var(--font-mono);">-</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Ticket Holder:</span>
+            <strong id="ptHolderName" style="color: #FFF;">-</strong>
+          </div>
+          <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+            <span style="color: var(--text-muted);">Status:</span>
+            <span class="badge badge-success" id="ptStatusBadge">VALID</span>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" onclick="closeModal('personalizedTicketModal')">Close</button>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-outline" id="btnShareTicketLink" onclick="copyTicketShareLink()">
+            <i class="fa-regular fa-copy"></i> Copy Ticket Link
+          </button>
+          <button class="btn btn-primary" id="btnDownloadTicket" onclick="downloadPersonalizedTicketPDF()">
+            <i class="fa-solid fa-file-pdf"></i> Download Ticket (PDF)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 12. EVENT CREATOR ATTENDEE MANAGEMENT & SALES HISTORY MODAL -->
+  <div id="attendeesModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 820px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title" id="attModalTitle">Event Sales & Attendees</h3>
+          <p class="card-subtitle">Track purchasers, download organized attendee lists, and monitor revenue.</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('attendeesModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Revenue Summary Grid -->
+        <div class="grid-cards-4" style="margin-bottom: 18px;">
+          <div class="card" style="padding: 12px 14px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Tickets Sold</div>
+            <div style="font-size: 1.3rem; font-weight: 800; color: #FFF;" id="attStatTicketsSold">0</div>
+          </div>
+          <div class="card" style="padding: 12px 14px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Gross Sales</div>
+            <div style="font-size: 1.3rem; font-weight: 800; color: var(--accent-emerald);" id="attStatGrossSales">₦0.00</div>
+          </div>
+          <div class="card" style="padding: 12px 14px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">3% STRICTWALLET Fee</div>
+            <div style="font-size: 1.3rem; font-weight: 800; color: var(--status-warning);" id="attStatCommission">₦0.00</div>
+          </div>
+          <div class="card" style="padding: 12px 14px;">
+            <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Your Net Earnings</div>
+            <div style="font-size: 1.3rem; font-weight: 800; color: var(--accent-blue-light);" id="attStatNetEarnings">₦0.00</div>
+          </div>
+        </div>
+
+        <!-- Controls: Search & Export Buttons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+          <div style="flex: 1; min-width: 220px; position: relative;">
+            <input type="text" id="attSearchInput" placeholder="Search by buyer, holder, ticket ID..." style="padding-left: 36px;" oninput="filterAttendeesTable()">
+            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.85rem;"></i>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline btn-sm" onclick="exportAttendeesCSV()">
+              <i class="fa-solid fa-file-csv"></i> Export CSV
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="exportAttendeesPDF()">
+              <i class="fa-solid fa-file-pdf"></i> Download PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- Attendees Table -->
+        <div class="table-container">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Ticket ID</th>
+                <th>Ticket Holder</th>
+                <th>Buyer</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="attendeesTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('attendeesModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 13. QR SCANNER & TICKET VERIFICATION MODAL -->
+  <div id="qrScannerModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title"><i class="fa-solid fa-qrcode" style="color: var(--accent-emerald);"></i> Ticket Check-In Scanner</h3>
+          <p class="card-subtitle" id="qrScannerEventTitle">Event: Alvan Night 2026</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeQrScanner()">&times;</button>
+      </div>
+      <div class="modal-body">
+        
+        <!-- Live Camera QR Scanner Frame -->
+        <div id="qrReaderContainer" class="qr-scanner-frame">
+          <div id="qrReader" style="width: 100%;"></div>
+        </div>
+
+        <!-- Verification Result Box -->
+        <div id="qrScanResultBox" style="display: none;"></div>
+
+        <!-- Manual Token / ID Verification Input -->
+        <div style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+          <label class="form-label" for="manualVerifyInput" style="font-size: 0.8rem;">Or Enter Ticket Token / Ticket ID Manually:</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="manualVerifyInput" placeholder="SEC-QR-... or TKT-...">
+            <button class="btn btn-primary" onclick="verifyManualTicket()">
+              <i class="fa-solid fa-check"></i> Verify
+            </button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeQrScanner()">Close Scanner</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 14. EVENT CREATOR WITHDRAWAL MODAL -->
+  <div id="eventWithdrawModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title"><i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> Event Creator Withdrawal</h3>
+          <p class="card-subtitle">Transfer your ticket sales earnings directly to your bank account.</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('eventWithdrawModal')">&times;</button>
+      </div>
+      <form id="eventWithdrawForm">
+        <div class="modal-body">
+          
+          <!-- Balance & Charge Breakdown Banner -->
+          <div style="background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--text-muted); font-size: 0.85rem;">Available Creator Balance:</span>
+              <strong id="wthAvailableBalanceDisplay" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 6px;">
+              <span>Withdrawal Charge:</span>
+              <strong style="color: #FFF;">₦20.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary); padding-top: 4px;">
+              <span>Stamp Duty:</span>
+              <strong id="wthStampDutyDisplay" style="color: #FFF;">₦0</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); margin-top: 6px; padding-top: 6px;">
+              <span style="color: var(--text-muted);">Total Wallet Deduction:</span>
+              <strong id="wthTotalDeductionDisplay" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div class="form-group">
+            <label class="form-label" for="wthAmount">Amount (₦) *</label>
+            <input type="number" id="wthAmount" placeholder="e.g. 50000" min="100" required oninput="calculateWithdrawalTotal()">
+          </div>
+
+          <!-- Bank Selection (Strowallet Bank Lists API) -->
+          <div class="form-group">
+            <label class="form-label" for="wthBankSelect">Select Bank *</label>
+            <select id="wthBankSelect" required onchange="onBankSelectionChange()" onclick="if(this.options.length <= 1 || this.value === '') loadStrowalletBanks()" onfocus="if(this.options.length <= 1 || this.value === '') loadStrowalletBanks()">
+              <option value="">-- Choose destination bank --</option>
+            </select>
+          </div>
+
+          <!-- Account Number -->
+          <div class="form-group">
+            <label class="form-label" for="wthAccountNumber">Account Number (10 digits) *</label>
+            <input type="text" id="wthAccountNumber" maxlength="10" placeholder="0123456789" required oninput="onAccountNumberInput(this)">
+          </div>
+
+          <!-- Verified Account Name Display -->
+          <div class="form-group" id="wthAccountNameWrap" style="margin-bottom: 14px;">
+            <label class="form-label">Account Name (Auto-Verified)</label>
+            <div id="wthAccountNameDisplay" style="padding: 10px 14px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 700; color: var(--text-muted);">
+              Enter 10-digit account number to verify owner name...
+            </div>
+            <input type="hidden" id="wthNameEnquiryRef" value="">
+          </div>
+
+          <!-- Narration (Exact Provider Terminology) -->
+          <div class="form-group">
+            <label class="form-label" for="wthNarration">Narration *</label>
+            <input type="text" id="wthNarration" placeholder="e.g. Ticket earnings payout" required value="Ticket sales payout">
+          </div>
+
+          <!-- Transaction PIN -->
+          <div class="form-group">
+            <label class="form-label" for="wthPin" style="color: var(--accent-emerald); font-weight: 700;">
+              <i class="fa-solid fa-lock"></i> 4-Digit STRICTWALLET Transaction PIN *
+            </label>
+            <input type="password" id="wthPin" maxlength="4" placeholder="••••" style="font-size: 1.25rem; letter-spacing: 0.25em; text-align: center;" required pattern="\d{4}">
+          </div>
+
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('eventWithdrawModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitWithdrawal">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Confirm Withdrawal
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 15. EVENT CREATOR WITHDRAWAL RECEIPT MODAL -->
+  <div id="creatorWithdrawalReceiptModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
+        <div>
+          <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-receipt" style="color: var(--accent-emerald);"></i>
+            Withdrawal Receipt
+          </h3>
+          <p class="card-subtitle">Event Creator Wallet verified payout receipt</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('creatorWithdrawalReceiptModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="creatorWithdrawalReceiptBody">
+        <!-- Dynamically injected by JS -->
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('creatorWithdrawalReceiptModal')">Close</button>
+        <button type="button" class="btn btn-primary" id="btnDownloadCreatorReceiptPdf" onclick="downloadCurrentCreatorReceiptPdf()">
+          <i class="fa-solid fa-file-pdf"></i> Download Receipt (PDF)
+        </button>
+    </div>
+  </div>
+
   <!-- Floating WhatsApp Customer Service Button -->
   <a href="https://wa.me/2349161041419?text=Hello%20STRICTWALLET%20Customer%20Care,%20I%20need%20assistance." target="_blank" rel="noopener noreferrer" class="floating-whatsapp-btn" id="floatingWhatsappBtn" title="Chat on WhatsApp (09161041419)">
     <i class="fa-brands fa-whatsapp"></i>
@@ -996,6 +2088,6 @@
   <script src="https://js.paystack.co/v1/inline.js"></script>
 
   <!-- Main JavaScript App Logic -->
-  <script src="Script.js"></script>
+  <script src="/Script.js"></script>
 </body>
 </html>
