@@ -177,7 +177,7 @@ async function handleStrowalletWebhook(req, res) {
 
     console.log('[Strowallet Webhook] Received transfer notification:', {
       sessionId,
-      accountNumber,
+      accountNumber: accountNumber.length > 4 ? `****${accountNumber.slice(-4)}` : '****',
       amount,
       settledAmount,
       channelId: data.channelId || payload.channelId || null,

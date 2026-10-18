@@ -821,7 +821,15 @@ router.post('/virtual-account/verify-session', authenticateToken, async (req, re
     const { verifySessionId } = require('../services/strowallet');
     const { reconcileStrowalletTransfer } = require('../services/paymentReconciliation');
 
-    const verifyRes = await verifySessionId(sessionId, amount || 0);
+    let checkAmount = amount;
+    if (!checkAmount) {
+      const existingTx = await db.getTransactionByReference(sessionId);
+      if (existingTx && (existingTx.grossAmount || existingTx.amount)) {
+        checkAmount = existingTx.grossAmount || existingTx.amount;
+      }
+    }
+
+    const verifyRes = await verifySessionId(sessionId, checkAmount || 0);
     if (!verifyRes.success || !verifyRes.data) {
       return res.status(400).json({
         success: false,

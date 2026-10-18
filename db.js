@@ -302,6 +302,11 @@ const db = {
     return isFirebaseAvailable && dbRef !== null;
   },
 
+  getDbRef() {
+    ensureConnected();
+    return dbRef;
+  },
+
   reloadLocalBackup() {
     // Retained for backward interface compatibility; production uses live Firebase RTDB
     return false;

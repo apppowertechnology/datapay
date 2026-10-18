@@ -337,8 +337,12 @@ async function createSterlingVirtualAccount({ firstName, lastName, accountName, 
  * 5. VERIFY TRANSACTION SESSION ID
  * Endpoint: https://strowallet.com/api/verifysessionid/
  * Parameters: public_key, amount, sessionID
+ * 
+ * Note: Strowallet's upstream interbank settlement query takes ~30-40 seconds.
+ * The timeout is set to 50s (configurable via STROWALLET_VERIFY_TIMEOUT_MS) to accommodate
+ * the banking network latency without prematurely aborting valid verifications.
  */
-async function verifySessionId(sessionId, amount) {
+async function verifySessionId(sessionId, amount, options = {}) {
   const publicKey = process.env.STROWALLET_PUBLIC_KEY || STROWALLET_PUBLIC_KEY;
   const cleanSessionId = String(sessionId || '').trim();
 
@@ -361,61 +365,96 @@ async function verifySessionId(sessionId, amount) {
     }
   }
 
-  const endpoint = 'https://strowallet.com/api/verifysessionid/';
+  const endpoint = process.env.STROWALLET_VERIFY_SESSION_URL || 'https://strowallet.com/api/verifysessionid/';
+  const timeoutMs = parseInt(process.env.STROWALLET_VERIFY_TIMEOUT_MS, 10) || options.timeout || 50000;
+  const maxRetries = options.retries !== undefined ? options.retries : 1;
 
-  try {
-    const response = await axios.get(endpoint, {
-      params: {
-        public_key: publicKey,
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      console.info('[Strowallet Verify Session] Verifying session with provider:', {
+        sessionId: cleanSessionId,
         amount: cleanAmount,
-        sessionID: cleanSessionId
-      },
-      headers: {
-        'Accept': 'application/json'
-      },
-      timeout: 20000 // 20s timeout for provider query
-    });
+        attempt,
+        timeoutMs
+      });
 
-    const data = response.data;
-    // Expected Strowallet authoritative response:
-    // 200 OK: { "message": "Transaction received.", "status": 200 }
-    // 400 Bad Request: { "message": "Transaction not received.", "status": 400 }
-    const isSuccess = data && (
-      data.status === 200 ||
-      data.status === '200' ||
-      data.status === 'success' ||
-      data.success === true ||
-      (typeof data.message === 'string' && data.message.toLowerCase().includes('received'))
-    );
+      const response = await axios.get(endpoint, {
+        params: {
+          public_key: publicKey,
+          amount: cleanAmount,
+          sessionID: cleanSessionId
+        },
+        headers: {
+          'Accept': 'application/json'
+        },
+        timeout: timeoutMs
+      });
 
-    return {
-      success: isSuccess,
-      status: data.status || 200,
-      message: data.message || (isSuccess ? 'Transaction verified successfully.' : 'Transaction unconfirmed.'),
-      data
-    };
-  } catch (error) {
-    const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout'));
-    const responseData = error.response ? error.response.data : null;
-    const responseStatus = error.response ? error.response.status : null;
+      const data = response.data;
+      // Expected Strowallet authoritative response:
+      // 200 OK: { "message": "Transaction received.", "status": 200 }
+      // 400 Bad Request: { "message": "Transaction not received.", "status": 400 }
+      const msg = typeof data?.message === 'string' ? data.message.toLowerCase() : '';
+      const isSuccess = Boolean(data && (
+        data.status === 200 ||
+        data.status === '200' ||
+        data.status === 'success' ||
+        data.success === true ||
+        (msg.includes('received') && !msg.includes('not received'))
+      ));
 
-    console.warn('[Strowallet Verify Session Error]:', {
-      sessionId: cleanSessionId,
-      status: responseStatus,
-      isTimeout,
-      responseMessage: responseData?.message || error.message
-    });
+      return {
+        success: isSuccess,
+        status: data?.status || 200,
+        message: data?.message || (isSuccess ? 'Transaction verified successfully.' : 'Transaction unconfirmed.'),
+        data
+      };
+    } catch (error) {
+      const isTimeout = error.code === 'ECONNABORTED' || (error.message && error.message.toLowerCase().includes('timeout'));
+      const responseData = error.response ? error.response.data : null;
+      const responseStatus = error.response ? error.response.status : null;
 
-    // 400 indicates provider confirmed transaction was NOT received
-    const isUnconfirmed = responseStatus === 400 || (responseData && responseData.status === 400);
+      // HTTP 400 indicates authoritative provider response (e.g., 'Transaction not received.')
+      // Do NOT retry authoritative rejections.
+      const isUnconfirmed = responseStatus === 400 || (responseData && responseData.status === 400);
+      if (isUnconfirmed) {
+        console.warn('[Strowallet Verify Session Unconfirmed]:', {
+          sessionId: cleanSessionId,
+          status: responseStatus,
+          responseMessage: responseData?.message || 'Transaction not received.'
+        });
+        return {
+          success: false,
+          unconfirmed: true,
+          timeout: false,
+          status: 400,
+          message: responseData?.message || 'Transaction not received at provider.'
+        };
+      }
 
-    return {
-      success: false,
-      unconfirmed: isUnconfirmed,
-      timeout: isTimeout,
-      status: responseStatus || (isTimeout ? 504 : 500),
-      message: responseData?.message || (isTimeout ? 'Verification timed out at provider' : error.message)
-    };
+      console.warn(`[Strowallet Verify Session Error] (attempt ${attempt}/${maxRetries + 1}):`, {
+        sessionId: cleanSessionId,
+        status: responseStatus,
+        isTimeout,
+        responseMessage: responseData?.message || error.message
+      });
+
+      const isRetryable = isTimeout || (responseStatus && responseStatus >= 500);
+      if (attempt <= maxRetries && isRetryable) {
+        const backoffMs = attempt * 2000;
+        console.info(`[Strowallet Verify Session] Retrying verification in ${backoffMs}ms...`);
+        await new Promise(r => setTimeout(r, backoffMs));
+        continue;
+      }
+
+      return {
+        success: false,
+        unconfirmed: false,
+        timeout: isTimeout,
+        status: responseStatus || (isTimeout ? 504 : 500),
+        message: responseData?.message || (isTimeout ? `Verification timed out at provider after ${timeoutMs}ms` : error.message)
+      };
+    }
   }
 }
 

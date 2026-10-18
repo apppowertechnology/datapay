@@ -363,12 +363,25 @@ async function runAutomaticReconciliation() {
       if (!ref) continue;
 
       try {
-        await reconcileDepositTransaction({ reference: ref, triggeredBy: 'background_worker' });
+        const isVirtualAccount = tx.channel === 'virtual_account' || tx.bank === 'Sterling Bank' || Boolean(tx.sessionId);
+        if (isVirtualAccount) {
+          console.info(`[Auto-Reconciliation] Attempting Strowallet session re-verification for ${tx.sessionId || ref}...`);
+          const transferPayload = tx.raw || {
+            sessionId: tx.sessionId || ref,
+            accountNumber: tx.virtualAccountNumber,
+            amount: tx.grossAmount ?? tx.amount,
+            settledAmount: tx.availableAmount ?? tx.grossAmount ?? tx.amount,
+            currency: tx.currency || 'NGN'
+          };
+          await reconcileStrowalletTransfer(transferPayload);
+        } else {
+          await reconcileDepositTransaction({ reference: ref, triggeredBy: 'background_worker' });
+        }
       } catch (err) {
         console.warn(`[Auto-Reconciliation] Error reconciling ref ${ref}: ${err.message}`);
       }
 
-      // Throttle 500ms between calls to avoid hitting Paystack rate limits
+      // Throttle 500ms between calls to avoid hitting rate limits
       await new Promise(r => setTimeout(r, 500));
     }
   } catch (err) {
@@ -548,16 +561,126 @@ async function reconcileStrowalletTransfer(payload, options = {}) {
 
       if (!verifyRes.success) {
         if (verifyRes.timeout) {
-          console.warn(`[PaymentReconciliation] Provider verification timed out for session ${sessionId}.`);
+          console.warn(`[PaymentReconciliation] Provider verification timed out for session ${sessionId}. Keeping transaction Pending.`);
+
+          // Record or maintain Pending deposit record in database without crediting wallet
+          const pendingTx = {
+            id: sessionId,
+            userId: user.id,
+            userFullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'STRICTWALLET User',
+            userEmail: user.email,
+            type: 'deposit',
+            channel: 'virtual_account',
+            bank: 'Sterling Bank',
+            virtualAccountNumber: accountNumber,
+            amount: Math.max(0, Math.round((incomingGross - 25.00) * 100) / 100),
+            grossAmount: incomingGross,
+            availableAmount: (rawSettledAmount && !isNaN(parseFloat(rawSettledAmount)) && parseFloat(rawSettledAmount) > 0)
+              ? parseFloat(rawSettledAmount)
+              : incomingGross,
+            chargedAmount: incomingGross,
+            fee: 25.00,
+            providerFee: parseFloat(rawFeeAmount || 0),
+            vatAmount: parseFloat(rawVatAmount || 0),
+            currency: currency,
+            providerReference: sessionId,
+            sessionId: sessionId,
+            initiationTranRef: initiationTranRef,
+            settlementId: settlementId,
+            sourceAccountNumber: data.sourceAccountNumber || payload.sourceAccountNumber || null,
+            sourceAccountName: data.sourceAccountName || payload.sourceAccountName || null,
+            sourceBankName: data.sourceBankName || payload.sourceBankName || null,
+            channelId: data.channelId || payload.channelId || null,
+            status: 'Pending',
+            credited: false,
+            description: `Sterling Bank Virtual Account Transfer (Pending Verification - Provider Timed Out)`,
+            raw: payload,
+            createdAt: data.tranDateTime || payload.tranDateTime || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          if (!tx) {
+            await db.createTransaction(pendingTx);
+          } else {
+            await db.updateTransaction(tx.id, {
+              status: 'Pending',
+              updatedAt: new Date().toISOString()
+            });
+          }
+
+          // Ensure pending deposit record is also preserved
+          await db.saveDeposit({
+            id: `DEP-VA-${sessionId}`,
+            reference: sessionId,
+            providerReference: sessionId,
+            userId: user.id,
+            userEmail: user.email,
+            amount: pendingTx.amount,
+            grossAmount: incomingGross,
+            fee: 25.00,
+            channel: 'virtual_account',
+            bank: 'Sterling Bank',
+            status: 'Pending',
+            credited: false,
+            createdAt: pendingTx.createdAt,
+            updatedAt: new Date().toISOString()
+          });
+
           return {
             success: false,
             timeout: true,
-            status: 'Timeout',
-            message: 'Strowallet session verification timed out. Notification will be retried.'
+            status: 'Pending',
+            message: 'Strowallet session verification timed out. Notification recorded as Pending for retry.'
           };
         }
 
         console.warn(`[PaymentReconciliation] Session verification failed at provider for session ${sessionId}: ${verifyRes.message}`);
+
+        const unconfirmedTx = {
+          id: sessionId,
+          userId: user.id,
+          userFullName: user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'STRICTWALLET User',
+          userEmail: user.email,
+          type: 'deposit',
+          channel: 'virtual_account',
+          bank: 'Sterling Bank',
+          virtualAccountNumber: accountNumber,
+          amount: 0,
+          grossAmount: incomingGross,
+          availableAmount: (rawSettledAmount && !isNaN(parseFloat(rawSettledAmount)) && parseFloat(rawSettledAmount) > 0)
+            ? parseFloat(rawSettledAmount)
+            : incomingGross,
+          chargedAmount: incomingGross,
+          fee: 25.00,
+          providerFee: parseFloat(rawFeeAmount || 0),
+          vatAmount: parseFloat(rawVatAmount || 0),
+          currency: currency,
+          providerReference: sessionId,
+          sessionId: sessionId,
+          initiationTranRef: initiationTranRef,
+          settlementId: settlementId,
+          sourceAccountNumber: data.sourceAccountNumber || payload.sourceAccountNumber || null,
+          sourceAccountName: data.sourceAccountName || payload.sourceAccountName || null,
+          sourceBankName: data.sourceBankName || payload.sourceBankName || null,
+          channelId: data.channelId || payload.channelId || null,
+          status: 'Failed',
+          credited: false,
+          description: `Sterling Bank Virtual Account Transfer (Unconfirmed: ${verifyRes.message || 'Transaction not received at provider'})`,
+          raw: payload,
+          createdAt: data.tranDateTime || payload.tranDateTime || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        if (!tx) {
+          await db.createTransaction(unconfirmedTx);
+        } else {
+          await db.updateTransaction(tx.id, {
+            status: 'Failed',
+            description: unconfirmedTx.description,
+            updatedAt: new Date().toISOString()
+          });
+        }
+
         return {
           success: false,
           status: 'Failed',
