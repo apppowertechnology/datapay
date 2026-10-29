@@ -1011,14 +1011,14 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
     }
 
     // Withdrawal Fee Calculations:
-    // Charge to creator = ₦20
-    // Provider fee = ₦10
-    // Stamp duty = ₦50 for withdrawals >= ₦10,000 (₦0 for < ₦10,000)
-    // STRICTWALLET profit = (charge - providerFee) + stampDuty (₦10 if < ₦10,000; ₦60 if >= ₦10,000)
+    // API provider charge = ₦12.00
+    // STRICTWALLET customer charge = ₦20.00
+    // Expected STRICTWALLET gross profit = ₦20.00 - ₦12.00 = ₦8.00 per successful withdrawal
+    // Statutory Stamp duty = ₦50.00 for withdrawals >= ₦10,000 (₦0.00 for < ₦10,000)
     const charge = 20.00;
-    const providerFee = 10.00;
+    const providerFee = 12.00;
     const stampDuty = withdrawAmount >= 10000 ? 50.00 : 0.00;
-    const profit = Math.round(((charge - providerFee) + stampDuty) * 100) / 100;
+    const profit = Math.round((charge - providerFee) * 100) / 100; // Exactly ₦8.00 profit
     const totalDeduction = Math.round((withdrawAmount + charge + stampDuty) * 100) / 100;
 
     // Check Organizer Wallet Balance
@@ -1079,7 +1079,7 @@ router.post('/withdrawals/request', authenticateToken, async (req, res) => {
       // Transfer Succeeded!
       withdrawalRecord.status = 'Successful';
       withdrawalRecord.providerReference = transferResult.reference;
-      withdrawalRecord.profit = profit; // ₦10 confirmed profit
+      withdrawalRecord.profit = profit; // ₦8 confirmed profit
       wallet.totalWithdrawn = Math.round(((parseFloat(wallet.totalWithdrawn) || 0) + withdrawAmount) * 100) / 100;
       await db.saveOrganizerWallet(wallet);
       await db.updateEventWithdrawal(withdrawalRecord.id, withdrawalRecord);

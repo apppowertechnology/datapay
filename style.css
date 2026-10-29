@@ -2039,14 +2039,15 @@ div[style*="grid-template-columns: 1fr 1fr;"] {
     width: 100%;
   }
 
-  .wallet-actions #btnDashboardFund {
-    grid-column: span 2;
-    padding: 13px;
-    font-size: 0.95rem;
+  .wallet-actions #btnDashboardFund,
+  .wallet-actions #btnDashboardWithdraw {
+    grid-column: span 1;
+    padding: 12px 6px;
+    font-size: 0.9rem;
   }
 
   .wallet-actions .btn-secondary {
-    padding: 10px;
+    padding: 10px 6px;
     font-size: 0.85rem;
   }
 
@@ -3209,6 +3210,74 @@ code {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+
+/* ==========================================================================
+   FINANCIAL SUMMARY & RECONCILIATION STYLES
+   ========================================================================== */
+.timeframe-pill-group {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-pill);
+  padding: 4px;
+  gap: 4px;
+}
+
+.timeframe-pill-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.timeframe-pill-btn:hover {
+  color: #FFF;
+}
+
+.timeframe-pill-btn.active {
+  background: var(--accent-emerald);
+  color: #060B19;
+  box-shadow: 0 2px 8px rgba(0, 208, 156, 0.3);
+}
+
+.financial-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: var(--transition);
+}
+
+.financial-stat-card:hover {
+  border-color: rgba(0, 208, 156, 0.3);
+  transform: translateY(-2px);
+}
+
+.audit-callout-box {
+  background: rgba(0, 208, 156, 0.04);
+  border: 1px solid rgba(0, 208, 156, 0.2);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+  margin-top: 16px;
+}
+
+.sms-dashboard-summary-card {
+  background: linear-gradient(135deg, rgba(13, 21, 45, 0.9) 0%, rgba(19, 31, 64, 0.9) 100%);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-bottom: 28px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 
 
 

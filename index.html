@@ -142,9 +142,15 @@
       <div id="regSharedBanner" class="auth-shared-banner" style="display: none;"></div>
 
       <form id="registerForm">
-        <div class="form-group">
-          <label class="form-label" for="regFullName">Full Name</label>
-          <input type="text" id="regFullName" placeholder="e.g. Chukwuemeka Adeyemi" required>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="regFirstName">First Name</label>
+            <input type="text" id="regFirstName" placeholder="e.g. Chukwuemeka" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="regLastName">Last Name</label>
+            <input type="text" id="regLastName" placeholder="e.g. Adeyemi" required>
+          </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
@@ -432,6 +438,9 @@
                 <button class="btn btn-primary" id="btnDashboardFund" onclick="openModal('fundWalletModal')">
                   <i class="fa-solid fa-plus"></i> Fund Wallet
                 </button>
+                <button class="btn btn-outline" id="btnDashboardWithdraw" onclick="openMainWalletWithdrawalModal()">
+                  <i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw
+                </button>
                 <button class="btn btn-secondary" onclick="navigateToView('viewAirtime')">
                   <i class="fa-solid fa-mobile-screen-button"></i> Airtime
                 </button>
@@ -441,7 +450,84 @@
               </div>
             </div>
 
-            <!-- Virtual account logic removed, using direct Paystack funding modal -->
+            <!-- Sterling Bank Virtual Account Card -->
+            <div class="card" id="sterlingAccountCard" style="display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden;">
+              <!-- Decorative subtle background badge -->
+              <div style="position: absolute; right: -15px; bottom: -20px; font-size: 7rem; opacity: 0.04; color: var(--accent-emerald); pointer-events: none;">
+                <i class="fa-solid fa-building-columns"></i>
+              </div>
+
+              <!-- State A: Account Not Yet Generated (Eligible Existing Users) -->
+              <div id="sterlingAccountNotGenerated" style="display: none; height: 100%; flex-direction: column; justify-content: space-between; gap: 14px;">
+                <div class="card-header" style="padding: 0; margin-bottom: 0;">
+                  <div>
+                    <h3 class="card-title" style="font-size: 1.05rem; display: flex; align-items: center; gap: 8px;">
+                      <i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> Sterling Bank Account
+                    </h3>
+                    <p class="card-subtitle" style="margin-top: 4px;">Get your permanent virtual bank account for automated wallet funding</p>
+                  </div>
+                  <div class="card-icon-badge emerald">
+                    <i class="fa-solid fa-bolt"></i>
+                  </div>
+                </div>
+
+                <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin: 0;">
+                  Fund your STRICTWALLET wallet directly by bank transfer from any Nigerian banking app or USSD using a dedicated Sterling Bank virtual account assigned to your name.
+                </p>
+
+                <div>
+                  <button class="btn btn-primary" id="btnGenerateVirtualAccount" onclick="generateSterlingVirtualAccount()" style="width: 100%; justify-content: center;">
+                    <i class="fa-solid fa-plus-circle"></i> GENERATE VIRTUAL ACCOUNT
+                  </button>
+                  <div id="generateAccountErrorMsg" style="display: none; margin-top: 8px; font-size: 0.82rem; color: var(--accent-red); line-height: 1.4;"></div>
+                </div>
+              </div>
+
+              <!-- State B: Account Active & Assigned -->
+              <div id="sterlingAccountActive" style="display: none; flex-direction: column; gap: 12px;">
+                <div class="card-header" style="padding: 0; margin-bottom: 0;">
+                  <div>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span style="font-size: 0.72rem; font-weight: 700; color: var(--accent-emerald); letter-spacing: 0.06em; text-transform: uppercase; background: rgba(0, 208, 156, 0.12); padding: 3px 8px; border-radius: 4px;">Automated Bank Funding</span>
+                    </div>
+                    <h3 class="card-title" style="font-size: 1.08rem; margin-top: 6px; display: flex; align-items: center; gap: 8px;">
+                      <i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> <span id="sterlingBankNameDisplay">Sterling Bank</span>
+                    </h3>
+                  </div>
+                  <div class="card-icon-badge emerald">
+                    <i class="fa-solid fa-shield-halved"></i>
+                  </div>
+                </div>
+
+                <!-- Account Number & Copy Button -->
+                <div style="background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;">
+                  <div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Account Number</div>
+                    <div id="sterlingAccountNumberDisplay" style="font-family: var(--font-mono); font-size: 1.35rem; font-weight: 800; color: #FFF; letter-spacing: 0.05em; margin-top: 2px;">
+                      ----------
+                    </div>
+                  </div>
+                  <button class="btn btn-secondary btn-sm" id="btnCopySterlingAccount" onclick="copySterlingAccountNumber()" title="Copy Account Number" style="padding: 8px 12px; gap: 6px;">
+                    <i class="fa-regular fa-copy" id="copySterlingIcon"></i> <span id="copySterlingText">Copy</span>
+                  </button>
+                </div>
+
+                <!-- Account Holder Name -->
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.84rem; padding: 0 4px;">
+                  <span style="color: var(--text-muted);">Account Name:</span>
+                  <strong id="sterlingAccountNameDisplay" style="color: #FFF; text-align: right;">--</strong>
+                </div>
+
+                <!-- Instruction & Fee Notice -->
+                <div style="background: rgba(0, 208, 156, 0.06); border-left: 3px solid var(--accent-emerald); padding: 8px 12px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;">
+                  <p style="font-size: 0.78rem; color: var(--text-secondary); margin: 0; line-height: 1.45;">
+                    <i class="fa-solid fa-circle-info" style="color: var(--accent-emerald); margin-right: 4px;"></i>
+                    Transfer money into this account from any bank app or USSD to fund your STRICTWALLET wallet. (₦25 fee charged per incoming transfer).
+                  </p>
+                </div>
+              </div>
+
+            </div>
 
           </div>
 
@@ -701,6 +787,7 @@
                 <select id="txFilterType" style="width: 140px; padding: 8px 12px;">
                   <option value="all">All Types</option>
                   <option value="deposit">Deposits</option>
+                  <option value="withdrawal">Withdrawals</option>
                   <option value="airtime">Airtime</option>
                   <option value="data">Data</option>
                 </select>
@@ -968,6 +1055,82 @@
                 <label class="form-label">Next of Kin (Recovery Question)</label>
                 <input type="text" id="setNextOfKin" readonly style="opacity: 0.8;">
               </div>
+
+              <!-- Action Button for Eligible Old Users -->
+              <div id="settingsUpdateDetailsAction" style="display: none; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border-color);">
+                <button type="button" class="btn btn-primary btn-block" id="btnUpdateDetails" onclick="openUpdateDetailsForm()">
+                  <i class="fa-solid fa-user-pen"></i> Update Details
+                </button>
+              </div>
+
+              <!-- Update Name Details Form (Revealed when clicking Update Details) -->
+              <div id="settingsUpdateDetailsFormContainer" style="display: none; margin-top: 16px; background: rgba(13, 21, 45, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+                <h4 style="font-size: 0.95rem; margin-bottom: 6px; color: var(--accent-emerald); display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-user-pen"></i> Update Name Details
+                </h4>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
+                  Please provide your separate First Name and Last Name below. This will update your profile and allow you to generate your dedicated virtual account number.
+                </p>
+
+                <form id="updateNameDetailsForm" onsubmit="submitUpdateNameDetails(event)">
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" for="updateFirstName">First Name <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="updateFirstName" placeholder="e.g. Chukwuemeka" autocomplete="given-name" required>
+                    <div id="updateFirstNameError" style="display: none; color: #f87171; font-size: 0.75rem; margin-top: 4px;"></div>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 16px;">
+                    <label class="form-label" for="updateLastName">Last Name <span style="color: #f87171;">*</span></label>
+                    <input type="text" id="updateLastName" placeholder="e.g. Adeyemi" autocomplete="family-name" required>
+                    <div id="updateLastNameError" style="display: none; color: #f87171; font-size: 0.75rem; margin-top: 4px;"></div>
+                  </div>
+
+                  <div id="updateNameGlobalError" style="display: none; color: #f87171; font-size: 0.82rem; margin-bottom: 14px; padding: 10px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: var(--radius-sm);"></div>
+
+                  <div style="display: flex; gap: 10px;">
+                    <button type="submit" class="btn btn-primary" id="btnSaveNameDetails" style="flex: 1; justify-content: center;">
+                      <i class="fa-solid fa-floppy-disk"></i> Save Details
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="cancelUpdateDetailsForm()">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Post-Update Action: Generate Virtual Account Number -->
+              <div id="settingsVirtualAccountPrompt" style="display: none; margin-top: 18px; padding: 16px; background: rgba(0, 208, 156, 0.08); border: 1px solid rgba(0, 208, 156, 0.25); border-radius: var(--radius-md);">
+                <div style="display: flex; align-items: flex-start; gap: 12px;">
+                  <div style="color: var(--accent-emerald); font-size: 1.2rem; margin-top: 2px;"><i class="fa-solid fa-circle-check"></i></div>
+                  <div style="flex: 1;">
+                    <div style="font-weight: 700; color: #fff; font-size: 0.95rem;">Name Details Saved</div>
+                    <p style="font-size: 0.82rem; color: var(--text-secondary); margin: 4px 0 12px 0; line-height: 1.4;">
+                      Your First Name and Last Name have been saved. You can now generate your dedicated Sterling Bank virtual account number.
+                    </p>
+                    <button type="button" class="btn btn-primary btn-block" id="btnSettingsGenerateVirtualAccount" onclick="triggerVirtualAccountGenerationFromSettings()">
+                      <i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number
+                    </button>
+                    <div id="settingsVirtualAccountErrorMsg" style="display: none; margin-top: 8px; font-size: 0.82rem; color: var(--accent-red); line-height: 1.4;"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Virtual Account Details in Settings (when assigned) -->
+              <div id="settingsVirtualAccountDisplay" style="display: none; margin-top: 18px; padding: 14px; background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
+                <div style="font-size: 0.72rem; font-weight: 700; color: var(--accent-emerald); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
+                  <i class="fa-solid fa-building-columns"></i> Dedicated Virtual Account
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                  <div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Bank: <strong id="settingsBankNameDisplay" style="color: #fff;">Sterling Bank</strong></div>
+                    <div style="font-size: 1.15rem; font-weight: 800; letter-spacing: 0.05em; color: var(--accent-emerald); margin: 2px 0;" id="settingsAccountNumberDisplay">--</div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Account Name: <span id="settingsAccountNameDisplay" style="color: #fff;">--</span></div>
+                  </div>
+                  <button type="button" class="btn btn-outline btn-sm" onclick="copySettingsVirtualAccount()">
+                    <i class="fa-regular fa-copy"></i> Copy
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Security: PIN & Password -->
@@ -1037,6 +1200,37 @@
 
             </div>
 
+          </div>
+
+          <!-- Transactional SMS Alerts Settings Card -->
+          <div class="card" id="smsAlertSettingsCard" style="margin-top: 24px;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                  <i class="fa-solid fa-comment-sms" style="color: var(--accent-blue-light);"></i> Transaction SMS Alerts
+                </h3>
+                <p class="card-subtitle">Receive transactional SMS alerts for your wallet transactions</p>
+              </div>
+              <div class="card-icon-badge blue"><i class="fa-solid fa-bell"></i></div>
+            </div>
+
+            <!-- Current Status & Toggle Control -->
+            <div style="background: rgba(13, 21, 45, 0.8); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 18px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;">Alert Preference</div>
+                <div style="font-size: 1.25rem; font-weight: 800; margin-top: 2px;" id="smsAlertsStatusText">
+                  Transaction SMS Alerts: <span style="color: #f87171;" id="smsAlertsStatusVal">OFF</span>
+                </div>
+                <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 4px;">
+                  Registered Notification Phone: <strong id="smsAlertsPhoneDisplay" style="color: #fff;">--</strong>
+                </div>
+              </div>
+              <div>
+                <button type="button" class="btn btn-primary" id="btnToggleSmsAlerts" onclick="toggleSmsAlerts()">
+                  TURN ON
+                </button>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -1293,6 +1487,97 @@
           </button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- 6B. MAIN WALLET WITHDRAWAL MODAL -->
+  <div id="mainWalletWithdrawModal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-header">
+        <div>
+          <h3 class="card-title"><i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> Withdraw from Main Wallet</h3>
+          <p class="card-subtitle">Transfer funds directly from your main wallet to your Nigerian bank account.</p>
+        </div>
+        <button class="modal-close-btn" onclick="closeModal('mainWalletWithdrawModal')">&times;</button>
+      </div>
+      <form id="mainWalletWithdrawForm">
+        <div class="modal-body">
+          
+          <!-- Balance & Applicable Charges Breakdown Banner -->
+          <div style="background: rgba(13, 21, 45, 0.85); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+              <span style="color: var(--text-muted); font-size: 0.85rem;">Available Main Wallet Balance:</span>
+              <strong id="mainWthAvailableBalanceDisplay" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); padding-top: 6px;">
+              <span>Withdrawal Charge:</span>
+              <strong style="color: #FFF;">₦20.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary); padding-top: 4px;">
+              <span>Stamp Duty (₦10,000 and above):</span>
+              <strong id="mainWthStampDutyDisplay" style="color: #FFF;">₦0.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); margin-top: 6px; padding-top: 6px;">
+              <span style="color: var(--text-muted);">Total Wallet Deduction:</span>
+              <strong id="mainWthTotalDeductionDisplay" style="color: var(--accent-emerald); font-family: var(--font-mono);">₦0.00</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.82rem; color: var(--text-secondary); border-top: 1px solid var(--border-color); margin-top: 6px; padding-top: 6px;">
+              <span style="color: var(--text-muted);">Amount You Will Receive:</span>
+              <strong id="mainWthReceiveAmountDisplay" style="color: #FFF; font-family: var(--font-mono); font-size: 0.95rem;">₦0.00</strong>
+            </div>
+          </div>
+
+          <!-- Amount -->
+          <div class="form-group">
+            <label class="form-label" for="mainWthAmount">Amount to Withdraw (₦) *</label>
+            <input type="number" id="mainWthAmount" placeholder="e.g. 10000" min="100" required oninput="calculateMainWithdrawalTotal()">
+          </div>
+
+          <!-- Destination Bank Selection -->
+          <div class="form-group">
+            <label class="form-label" for="mainWthBankSelect">Destination Bank *</label>
+            <select id="mainWthBankSelect" required onchange="onMainBankSelectionChange()" onclick="if(this.options.length <= 1 || this.value === '') loadMainWalletBanks()" onfocus="if(this.options.length <= 1 || this.value === '') loadMainWalletBanks()">
+              <option value="">-- Choose destination bank --</option>
+            </select>
+          </div>
+
+          <!-- Account Number -->
+          <div class="form-group">
+            <label class="form-label" for="mainWthAccountNumber">Bank Account Number (10 digits) *</label>
+            <input type="text" id="mainWthAccountNumber" maxlength="10" placeholder="0123456789" required oninput="onMainAccountNumberInput(this)">
+          </div>
+
+          <!-- Verified Account Name Display -->
+          <div class="form-group" id="mainWthAccountNameWrap" style="margin-bottom: 14px;">
+            <label class="form-label">Account Name (Auto-Verified)</label>
+            <div id="mainWthAccountNameDisplay" style="padding: 10px 14px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--border-color); border-radius: var(--radius-sm); font-size: 0.9rem; font-weight: 700; color: var(--text-muted);">
+              Enter 10-digit account number to verify owner name...
+            </div>
+            <input type="hidden" id="mainWthNameEnquiryRef" value="">
+          </div>
+
+          <!-- Narration -->
+          <div class="form-group">
+            <label class="form-label" for="mainWthNarration">Narration *</label>
+            <input type="text" id="mainWthNarration" placeholder="e.g. Main wallet withdrawal" required value="Wallet withdrawal">
+          </div>
+
+          <!-- 4-Digit Transaction PIN -->
+          <div class="form-group">
+            <label class="form-label" for="mainWthPin" style="color: var(--accent-emerald); font-weight: 700;">
+              <i class="fa-solid fa-lock"></i> 4-Digit STRICTWALLET Transaction PIN *
+            </label>
+            <input type="password" id="mainWthPin" maxlength="4" placeholder="••••" style="font-size: 1.25rem; letter-spacing: 0.25em; text-align: center;" required pattern="\d{4}">
+          </div>
+
+        </div>
+        <div class="modal-footer" style="display: flex; justify-content: space-between;">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('mainWalletWithdrawModal')">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btnSubmitMainWithdrawal">
+            <i class="fa-solid fa-arrow-up-from-bracket"></i> Confirm Withdrawal
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

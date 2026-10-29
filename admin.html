@@ -86,6 +86,10 @@
           <i class="fa-solid fa-chart-pie"></i>
           <span>Overview & Analytics</span>
         </div>
+        <div class="nav-item" data-admin-view="viewAdminFinancialSummary">
+          <i class="fa-solid fa-chart-line"></i>
+          <span>Financial Summary</span>
+        </div>
         <div class="nav-item" data-admin-view="viewAdminUsers">
           <i class="fa-solid fa-users"></i>
           <span>User Management</span>
@@ -117,6 +121,10 @@
         <div class="nav-item" data-admin-view="viewAdminSocial">
           <i class="fa-solid fa-share-nodes"></i>
           <span>Social Media</span>
+        </div>
+        <div class="nav-item" data-admin-view="viewAdminSms">
+          <i class="fa-solid fa-comment-sms"></i>
+          <span>SMS Alert Revenue</span>
         </div>
         <div class="nav-item" id="btnAdminLogout" style="color: var(--status-error); margin-top: auto;">
           <i class="fa-solid fa-right-from-bracket"></i>
@@ -181,18 +189,18 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title" id="statAdminTotalDeposits">₦0.00</div>
-                  <div class="card-subtitle">Total Verified Deposits</div>
+                  <div class="card-title" id="statAdminTotalPlatformVolume" style="color: var(--accent-blue-light);">₦0.00</div>
+                  <div class="card-subtitle">Platform Transaction Volume</div>
                 </div>
-                <div class="card-icon-badge emerald"><i class="fa-solid fa-building-columns"></i></div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-money-bill-transfer"></i></div>
               </div>
             </div>
 
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title" id="statAdminTotalRevenue">₦0.00</div>
-                  <div class="card-subtitle">Total Sales Volume</div>
+                  <div class="card-title" id="statAdminTotalRevenue" style="color: #60a5fa;">₦0.00</div>
+                  <div class="card-subtitle">Total Earned Revenue</div>
                 </div>
                 <div class="card-icon-badge blue"><i class="fa-solid fa-chart-line"></i></div>
               </div>
@@ -202,7 +210,7 @@
               <div class="card-header">
                 <div>
                   <div class="card-title" id="statAdminTotalProfit" style="color: var(--accent-emerald);">₦0.00</div>
-                  <div class="card-subtitle">Total Net Profit</div>
+                  <div class="card-subtitle">Total Gross Profit</div>
                 </div>
                 <div class="card-icon-badge emerald"><i class="fa-solid fa-sack-dollar"></i></div>
               </div>
@@ -210,12 +218,12 @@
           </div>
 
           <!-- Secondary Metrics -->
-          <div class="grid-cards-4" style="margin-bottom: 28px;">
+          <div class="grid-cards-4" style="margin-bottom: 24px;">
             <div class="card">
               <div class="card-header">
                 <div>
                   <div class="card-title" id="statAdminAirtimeSales">₦0.00</div>
-                  <div class="card-subtitle">Airtime Sales</div>
+                  <div class="card-subtitle">Airtime Sales (<span id="statAdminAirtimeProfit" style="color: var(--accent-emerald);">+₦0.00</span> profit)</div>
                 </div>
                 <div class="card-icon-badge blue"><i class="fa-solid fa-mobile-screen-button"></i></div>
               </div>
@@ -225,7 +233,7 @@
               <div class="card-header">
                 <div>
                   <div class="card-title" id="statAdminDataSales">₦0.00</div>
-                  <div class="card-subtitle">Data Bundle Sales</div>
+                  <div class="card-subtitle">Data Bundle Sales (<span id="statAdminDataProfit" style="color: var(--accent-emerald);">+₦0.00</span> profit)</div>
                 </div>
                 <div class="card-icon-badge purple"><i class="fa-solid fa-wifi"></i></div>
               </div>
@@ -234,20 +242,122 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title" id="statAdminTotalTx">0</div>
-                  <div class="card-subtitle">Total Transactions</div>
+                  <div class="card-title" id="statAdminTotalDeposits">₦0.00</div>
+                  <div class="card-subtitle">Total Deposits (<span id="statAdminDepositCharges" style="color: var(--accent-emerald);">₦0.00</span> fees)</div>
                 </div>
-                <div class="card-icon-badge blue"><i class="fa-solid fa-receipt"></i></div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-building-columns"></i></div>
               </div>
             </div>
 
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title" id="statAdminOpenTickets">0</div>
-                  <div class="card-subtitle">Pending Support Tickets</div>
+                  <div class="card-title" id="statAdminTotalTx">0</div>
+                  <div class="card-subtitle">Total Tx (<span id="statAdminOpenTickets">0</span> open tickets)</div>
                 </div>
-                <div class="card-icon-badge emerald"><i class="fa-solid fa-headset"></i></div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-receipt"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ================= REQUIREMENT 2: MAIN DASHBOARD SMS FINANCIAL SUMMARY ================= -->
+          <div class="sms-dashboard-summary-card">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px;">
+              <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <div class="card-icon-badge purple" style="width: 36px; height: 36px; font-size: 1rem;">
+                    <i class="fa-solid fa-comment-sms"></i>
+                  </div>
+                  <h3 style="font-size: 1.15rem; font-weight: 800; color: #FFF; margin: 0;">
+                    SMS Alert Revenue & Profit Summary
+                  </h3>
+                  <span class="badge" style="background: rgba(96, 165, 250, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); font-size: 0.72rem;">
+                    ₦10 Charge − ₦6 Cost = ₦4 Profit
+                  </span>
+                </div>
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 6px 0 0 0;">
+                  Actual transactional SMS billing records, provider delivery status, and earned profit metrics.
+                </p>
+              </div>
+
+              <div style="display: flex; gap: 8px;">
+                <button class="btn btn-outline btn-sm" onclick="navigateAdminView('viewAdminFinancialSummary')">
+                  <i class="fa-solid fa-chart-line"></i> Financial Summary
+                </button>
+                <button class="btn btn-secondary btn-sm" onclick="navigateAdminView('viewAdminSms')">
+                  <i class="fa-solid fa-list-check"></i> SMS Ledger
+                </button>
+              </div>
+            </div>
+
+            <!-- Core SMS Financial Figures -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px;">
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Total Processed</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #FFF; font-family: var(--font-mono); margin-top: 2px;" id="dashSmsTotalProcessed">0</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">Alert attempts</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Delivered / Sent</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="dashSmsDelivered">0</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">Confirmed delivery</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Failed (Uncharged)</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: var(--status-error); font-family: var(--font-mono); margin-top: 2px;" id="dashSmsFailed">0</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">₦0 charged</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Charged Count</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="dashSmsCharged">0</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">Eligible alerts</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">SMS Revenue</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #60a5fa; font-family: var(--font-mono); margin-top: 2px;" id="dashSmsRevenue">₦0.00</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">₦10 per sent alert</div>
+              </div>
+
+              <div style="background: rgba(0,0,0,0.25); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Provider Expenses</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: #f87171; font-family: var(--font-mono); margin-top: 2px;" id="dashSmsExpenses">₦0.00</div>
+                <div style="font-size: 0.7rem; color: var(--text-muted);">₦6 per sent alert</div>
+              </div>
+
+              <div style="background: rgba(0, 208, 156, 0.08); padding: 12px 14px; border-radius: var(--radius-md); border: 1px solid rgba(0, 208, 156, 0.3);">
+                <div style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">Total SMS Profit</div>
+                <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="dashSmsProfit">₦0.00</div>
+                <div style="font-size: 0.7rem; color: var(--accent-emerald);">₦4 per sent alert</div>
+              </div>
+            </div>
+
+            <!-- Time-based SMS Profit Row -->
+            <div style="background: rgba(0,0,0,0.35); padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <div style="font-size: 0.8rem; font-weight: 700; color: var(--text-secondary);">
+                <i class="fa-solid fa-clock-rotate-left" style="color: var(--accent-blue-light); margin-right: 6px;"></i> SMS Profit Timeframes:
+              </div>
+
+              <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">Today:</span>
+                  <strong style="font-family: var(--font-mono); color: var(--accent-emerald); margin-left: 4px;" id="dashSmsDailyProfit">₦0.00</strong>
+                </div>
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">Last 7 Days:</span>
+                  <strong style="font-family: var(--font-mono); color: var(--accent-emerald); margin-left: 4px;" id="dashSmsWeeklyProfit">₦0.00</strong>
+                </div>
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">This Month:</span>
+                  <strong style="font-family: var(--font-mono); color: var(--accent-emerald); margin-left: 4px;" id="dashSmsMonthlyProfit">₦0.00</strong>
+                </div>
+                <div>
+                  <span style="font-size: 0.72rem; color: var(--text-muted);">All-Time:</span>
+                  <strong style="font-family: var(--font-mono); color: var(--accent-emerald); margin-left: 4px;" id="dashSmsAllTimeProfit">₦0.00</strong>
+                </div>
               </div>
             </div>
           </div>
@@ -263,6 +373,494 @@
             <div style="height: 320px; width: 100%;">
               <canvas id="adminSalesChart"></canvas>
             </div>
+          </div>
+
+        </section>
+
+        <!-- ================= REQUIREMENT 1: DEDICATED FINANCIAL SUMMARY & TOTAL PROFIT ================= -->
+        <section id="viewAdminFinancialSummary" class="view-section">
+          
+          <!-- Master Header & Timeframe Bar -->
+          <div class="card" style="margin-bottom: 24px; border-left: 4px solid var(--accent-emerald);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h2 class="card-title" style="font-size: 1.45rem; font-weight: 800; display: flex; align-items: center; gap: 10px;">
+                  <i class="fa-solid fa-scale-balanced" style="color: var(--accent-emerald);"></i>
+                  Financial Summary & Total Profit
+                </h2>
+                <p class="card-subtitle" style="margin-top: 4px;">
+                  Actual calculated totals from existing transaction ledgers and provider records. Zero estimates, zero synthetic data.
+                </p>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <div class="timeframe-pill-group" id="financialTimeframePills">
+                  <button type="button" class="timeframe-pill-btn active" data-timeframe="allTime">All-Time</button>
+                  <button type="button" class="timeframe-pill-btn" data-timeframe="today">Today</button>
+                  <button type="button" class="timeframe-pill-btn" data-timeframe="weekly">Last 7 Days</button>
+                  <button type="button" class="timeframe-pill-btn" data-timeframe="monthly">This Month</button>
+                </div>
+
+                <button class="btn btn-outline btn-sm" id="btnRefreshFinancialSummary">
+                  <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Master Totals Grid (4 High-Level Cards) -->
+          <div class="grid-cards-4" style="margin-bottom: 24px;">
+            <!-- Total Revenue -->
+            <div class="card" style="border-top: 3px solid #60a5fa;">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="finStatTotalRevenue" style="color: #60a5fa; font-size: 1.6rem; font-family: var(--font-mono);">₦0.00</div>
+                  <div class="card-subtitle" style="font-weight: 700; color: #FFF;">Total Revenue Earned</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Across all STRICTWALLET services</div>
+                </div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-chart-line"></i></div>
+              </div>
+            </div>
+
+            <!-- Total Expenses -->
+            <div class="card" style="border-top: 3px solid #f87171;">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="finStatTotalExpenses" style="color: #f87171; font-size: 1.6rem; font-family: var(--font-mono);">₦0.00</div>
+                  <div class="card-subtitle" style="font-weight: 700; color: #FFF;">Total Expenses (Costs)</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Actual recorded provider costs</div>
+                </div>
+                <div class="card-icon-badge" style="background: rgba(239, 68, 68, 0.12); color: #f87171;"><i class="fa-solid fa-wallet"></i></div>
+              </div>
+            </div>
+
+            <!-- Total Gross Profit -->
+            <div class="card" style="border-top: 3px solid var(--accent-emerald); background: linear-gradient(135deg, rgba(0, 208, 156, 0.08) 0%, rgba(13, 21, 45, 0.8) 100%);">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="finStatTotalGrossProfit" style="color: var(--accent-emerald); font-size: 1.6rem; font-family: var(--font-mono);">₦0.00</div>
+                  <div class="card-subtitle" style="font-weight: 700; color: #FFF;">Total Gross Profit</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Revenue minus direct service costs</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-sack-dollar"></i></div>
+              </div>
+            </div>
+
+            <!-- Total Net Profit -->
+            <div class="card" style="border-top: 3px solid var(--accent-emerald); background: linear-gradient(135deg, rgba(0, 208, 156, 0.12) 0%, rgba(13, 21, 45, 0.9) 100%);">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="finStatTotalNetProfit" style="color: var(--accent-emerald); font-size: 1.6rem; font-family: var(--font-mono);">₦0.00</div>
+                  <div class="card-subtitle" style="font-weight: 700; color: #FFF;">Total Net Profit</div>
+                  <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Gross profit minus recorded expenses</div>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-circle-dollar-to-slot"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Individual Service Profits Summary (6 Core Services) -->
+          <div style="margin-bottom: 24px;">
+            <div style="font-size: 0.85rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <i class="fa-solid fa-cubes-stacked" style="color: var(--accent-emerald);"></i>
+              Individual Service Profit Breakdown & Reconciliation
+            </div>
+
+            <div class="grid-cards-4" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+              <!-- Airtime Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Airtime Profit</div>
+                    <div class="card-title" id="finStatAirtimeProfit" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Volume: <span id="finStatAirtimeVolume">₦0.00</span> (2% margin)</div>
+                  </div>
+                  <div class="card-icon-badge blue"><i class="fa-solid fa-mobile-screen"></i></div>
+                </div>
+              </div>
+
+              <!-- Data Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Data Profit</div>
+                    <div class="card-title" id="finStatDataProfit" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Volume: <span id="finStatDataVolume">₦0.00</span></div>
+                  </div>
+                  <div class="card-icon-badge purple"><i class="fa-solid fa-wifi"></i></div>
+                </div>
+              </div>
+
+              <!-- Deposit Charges Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Deposit Charges</div>
+                    <div class="card-title" id="finStatDepositCharges" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Net Profit: <span id="finStatDepositProfit" style="color: var(--accent-emerald); font-weight: 700;">₦0.00</span> (₦25/VA tx)</div>
+                  </div>
+                  <div class="card-icon-badge emerald"><i class="fa-solid fa-building-columns"></i></div>
+                </div>
+              </div>
+
+              <!-- Withdrawal Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Withdrawal Profit</div>
+                    <div class="card-title" id="finStatWithdrawalProfit" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">₦8 profit / successful payout</div>
+                  </div>
+                  <div class="card-icon-badge emerald"><i class="fa-solid fa-money-bill-transfer"></i></div>
+                </div>
+              </div>
+
+              <!-- SMS Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total SMS Profit</div>
+                    <div class="card-title" id="finStatSmsProfit" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">Revenue: <span id="finStatSmsRevenue">₦0.00</span> (₦4/alert)</div>
+                  </div>
+                  <div class="card-icon-badge purple"><i class="fa-solid fa-comment-sms"></i></div>
+                </div>
+              </div>
+
+              <!-- Event Revenue & Profit -->
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Total Event Profit</div>
+                    <div class="card-title" id="finStatEventProfit" style="color: var(--accent-emerald); font-size: 1.35rem; font-family: var(--font-mono); margin-top: 2px;">₦0.00</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">3% Platform Commission</div>
+                  </div>
+                  <div class="card-icon-badge blue"><i class="fa-solid fa-ticket"></i></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Platform Volume vs Customer Funds Under Management -->
+          <div class="grid-cards-4" style="grid-template-columns: 1fr 1fr; margin-bottom: 24px;">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Platform Transaction Volume</div>
+                  <div class="card-title" id="finStatPlatformVolume" style="font-size: 1.5rem; font-family: var(--font-mono); color: #FFF; margin-top: 4px;">₦0.00</div>
+                  <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+                    Total gross transaction throughput (Deposits + Airtime + Data + Tickets + Completed Withdrawals).
+                  </p>
+                </div>
+                <div class="card-icon-badge blue"><i class="fa-solid fa-chart-pie"></i></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Customer Net Wallet Credits (Liabilities)</div>
+                  <div class="card-title" id="finStatNetCustomerCredits" style="font-size: 1.5rem; font-family: var(--font-mono); color: var(--accent-emerald); margin-top: 4px;">₦0.00</div>
+                  <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+                    Total net funds deposited and credited to customer wallets. Strictly customer funds, never counted as business profit.
+                  </p>
+                </div>
+                <div class="card-icon-badge emerald"><i class="fa-solid fa-shield-halved"></i></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Deep Dive Service Panels -->
+          <div style="display: flex; flex-direction: column; gap: 24px;">
+
+            <!-- 1. SMS Service Economics Card -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title"><i class="fa-solid fa-comment-sms" style="color: var(--accent-purple);"></i> SMS Service Financial Ledger</h3>
+                  <p class="card-subtitle">Verified customer billings (₦10) and provider costs (₦6). Expected profit: ₦4 per delivered alert.</p>
+                </div>
+              </div>
+
+              <div class="table-responsive" style="margin-top: 12px;">
+                <table class="table-custom">
+                  <thead>
+                    <tr>
+                      <th>Timeframe</th>
+                      <th>Processed</th>
+                      <th>Delivered</th>
+                      <th>Failed</th>
+                      <th>Charged</th>
+                      <th>SMS Revenue</th>
+                      <th>Provider Expenses</th>
+                      <th>Gross Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><span class="badge" style="background: rgba(0, 208, 156, 0.15); color: #00D09C;">Selected Period</span></td>
+                      <td id="finSmsPeriodProcessed" style="font-family: var(--font-mono);">0</td>
+                      <td id="finSmsPeriodDelivered" style="font-family: var(--font-mono); color: var(--accent-emerald);">0</td>
+                      <td id="finSmsPeriodFailed" style="font-family: var(--font-mono); color: #f87171;">0</td>
+                      <td id="finSmsPeriodCharged" style="font-family: var(--font-mono); font-weight: 700;">0</td>
+                      <td id="finSmsPeriodRevenue" style="font-family: var(--font-mono); color: #60a5fa; font-weight: 700;">₦0.00</td>
+                      <td id="finSmsPeriodExpenses" style="font-family: var(--font-mono); color: #f87171;">₦0.00</td>
+                      <td id="finSmsPeriodProfit" style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 800;">₦0.00</td>
+                    </tr>
+                    <tr>
+                      <td><span class="badge" style="background: rgba(37, 99, 235, 0.15); color: #60a5fa;">All-Time Records</span></td>
+                      <td id="finSmsAllProcessed" style="font-family: var(--font-mono);">0</td>
+                      <td id="finSmsAllDelivered" style="font-family: var(--font-mono); color: var(--accent-emerald);">0</td>
+                      <td id="finSmsAllFailed" style="font-family: var(--font-mono); color: #f87171;">0</td>
+                      <td id="finSmsAllCharged" style="font-family: var(--font-mono); font-weight: 700;">0</td>
+                      <td id="finSmsAllRevenue" style="font-family: var(--font-mono); color: #60a5fa; font-weight: 700;">₦0.00</td>
+                      <td id="finSmsAllExpenses" style="font-family: var(--font-mono); color: #f87171;">₦0.00</td>
+                      <td id="finSmsAllProfit" style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 800;">₦0.00</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="audit-callout-box">
+                <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;">
+                  <strong style="color: #FFF;"><i class="fa-solid fa-circle-info"></i> SMS Accounting Rules:</strong>
+                  Only confirmed delivered SMS alerts where the customer was debited ₦10 and the provider charged ₦6 generate ₦4 profit. Failed SMS attempts (e.g. sender ID awaiting activation or parameter validation failure) incurred ₦0 charge and ₦0 provider cost, producing exactly ₦0 profit without modifying historical transactions.
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Bank Withdrawals Economics Card -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title"><i class="fa-solid fa-money-bill-transfer" style="color: var(--accent-emerald);"></i> Bank Withdrawal Profit & Performance</h3>
+                  <p class="card-subtitle">STRICTWALLET customer charge: ₦20. API provider cost: ₦12. Expected profit: ₦8 per completed payout.</p>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 14px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Completed Volume</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #FFF; font-family: var(--font-mono); margin-top: 2px;" id="finWthVolume">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);"><span id="finWthSuccCount">0</span> successful payouts</div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Charges Collected</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #60a5fa; font-family: var(--font-mono); margin-top: 2px;" id="finWthCharges">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">₦20 per withdrawal</div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">API Provider Costs</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #f87171; font-family: var(--font-mono); margin-top: 2px;" id="finWthCost">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">₦12 per transfer</div>
+                </div>
+
+                <div style="background: rgba(0, 208, 156, 0.08); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(0, 208, 156, 0.3);">
+                  <div style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">Total Withdrawal Profit</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="finWthProfit">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--accent-emerald);">₦8 net profit / payout</div>
+                </div>
+              </div>
+
+              <!-- Status breakdown pills -->
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: var(--radius-md);">
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Successful:</span>
+                  <strong style="color: var(--accent-emerald); font-family: var(--font-mono); margin-left: 4px;" id="finWthStatusSucc">0 (₦0.00)</strong>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Pending / Processing:</span>
+                  <strong style="color: var(--status-warning); font-family: var(--font-mono); margin-left: 4px;" id="finWthStatusPending">0 (₦0.00)</strong>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Failed (Refunded):</span>
+                  <strong style="color: #f87171; font-family: var(--font-mono); margin-left: 4px;" id="finWthStatusFailed">0 (₦0.00)</strong>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Reversed:</span>
+                  <strong style="color: var(--text-secondary); font-family: var(--font-mono); margin-left: 4px;" id="finWthStatusReversed">0 (₦0.00)</strong>
+                </div>
+              </div>
+
+              <div class="audit-callout-box">
+                <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.5;">
+                  <strong style="color: #FFF;"><i class="fa-solid fa-circle-info"></i> Withdrawal Profit Rule:</strong>
+                  Only confirmed successful withdrawals recognize ₦20 charge and ₦12 provider cost (₦8 gross profit). Pending, processing, and failed withdrawals (including attempts failed due to IP whitelisting or bank downtime) do not recognize profit, and customer debits are safely refunded.
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Deposits & Virtual Account Charges Card -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title"><i class="fa-solid fa-building-columns" style="color: var(--accent-emerald);"></i> Deposits & Virtual Account Charges</h3>
+                  <p class="card-subtitle">STRICTWALLET charges ₦25 on applicable incoming virtual account transfers. Paystack deposits credit 100% to customer.</p>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 14px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Incoming Gross Volume</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #FFF; font-family: var(--font-mono); margin-top: 2px;" id="finDepGrossVolume">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);"><span id="finDepSuccCount">0</span> successful deposits</div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Net Credited to Users</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="finDepNetCredited">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">Customer wallet funds</div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Deposit Charges Collected</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #60a5fa; font-family: var(--font-mono); margin-top: 2px;" id="finDepCharges">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">₦25 per VA transfer</div>
+                </div>
+
+                <div style="background: rgba(0, 208, 156, 0.08); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(0, 208, 156, 0.3);">
+                  <div style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">Actual Deposit Profit</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="finDepProfit">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--accent-emerald);">Fees minus provider settlement costs</div>
+                </div>
+              </div>
+
+              <!-- Deposit Status Row -->
+              <div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 16px; padding: 12px 16px; background: rgba(0,0,0,0.25); border-radius: var(--radius-md);">
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Pending:</span>
+                  <strong style="color: var(--status-warning); font-family: var(--font-mono); margin-left: 4px;" id="finDepStatusPending">0 (₦0.00)</strong>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Failed:</span>
+                  <strong style="color: #f87171; font-family: var(--font-mono); margin-left: 4px;" id="finDepStatusFailed">0 (₦0.00)</strong>
+                </div>
+                <div style="font-size: 0.78rem;">
+                  <span style="color: var(--text-muted);">Cancelled / Expired:</span>
+                  <strong style="color: var(--text-secondary); font-family: var(--font-mono); margin-left: 4px;" id="finDepStatusCancelled">0 (₦0.00)</strong>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Airtime & Data VTU Reselling Card -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title"><i class="fa-solid fa-signal" style="color: var(--accent-blue);"></i> Airtime & Data VTU Reselling</h3>
+                  <p class="card-subtitle">Telecom airtime recharges (2% provider discount) and wholesale data bundle margins.</p>
+                </div>
+              </div>
+
+              <div class="table-responsive" style="margin-top: 12px;">
+                <table class="table-custom">
+                  <thead>
+                    <tr>
+                      <th>Service Category</th>
+                      <th>Successful Transactions</th>
+                      <th>Sales Volume (Revenue)</th>
+                      <th>Provider Wholesale Cost</th>
+                      <th>Gross Profit</th>
+                      <th>Average Margin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><i class="fa-solid fa-mobile-screen" style="color: var(--accent-blue); margin-right: 8px;"></i> <strong>Airtime Recharge</strong></td>
+                      <td id="finAirtimeCount" style="font-family: var(--font-mono);">0</td>
+                      <td id="finAirtimeVolumeTable" style="font-family: var(--font-mono); font-weight: 700;">₦0.00</td>
+                      <td id="finAirtimeCostTable" style="font-family: var(--font-mono); color: #f87171;">₦0.00</td>
+                      <td id="finAirtimeProfitTable" style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 800;">₦0.00</td>
+                      <td style="color: var(--accent-emerald); font-weight: 700;">2.0%</td>
+                    </tr>
+                    <tr>
+                      <td><i class="fa-solid fa-wifi" style="color: var(--accent-purple); margin-right: 8px;"></i> <strong>Data Bundles</strong></td>
+                      <td id="finDataCount" style="font-family: var(--font-mono);">0</td>
+                      <td id="finDataVolumeTable" style="font-family: var(--font-mono); font-weight: 700;">₦0.00</td>
+                      <td id="finDataCostTable" style="font-family: var(--font-mono); color: #f87171;">₦0.00</td>
+                      <td id="finDataProfitTable" style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 800;">₦0.00</td>
+                      <td style="color: var(--accent-emerald); font-weight: 700;">~6.3%</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 5. Event Services & Ticketing Card -->
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title"><i class="fa-solid fa-ticket" style="color: var(--accent-blue-light);"></i> Event Ticketing & Creator Services</h3>
+                  <p class="card-subtitle">STRICTWALLET charges 3% platform commission on ticket sales. 97% credited to Event Creator Wallets.</p>
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 14px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Gross Ticket Sales</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #FFF; font-family: var(--font-mono); margin-top: 2px;" id="finEvGrossSales">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);"><span id="finEvTicketsSold">0</span> tickets sold</div>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase;">Creator Net Earnings</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: #60a5fa; font-family: var(--font-mono); margin-top: 2px;" id="finEvCreatorEarnings">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--text-muted);">97% creator liability</div>
+                </div>
+
+                <div style="background: rgba(0, 208, 156, 0.08); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(0, 208, 156, 0.3);">
+                  <div style="font-size: 0.72rem; color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">STRICTWALLET Commission (3%)</div>
+                  <div style="font-size: 1.25rem; font-weight: 800; color: var(--accent-emerald); font-family: var(--font-mono); margin-top: 2px;" id="finEvCommissionProfit">₦0.00</div>
+                  <div style="font-size: 0.7rem; color: var(--accent-emerald);">Direct platform profit</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. Master Reconciliation Audit & Compliance Notice -->
+            <div class="card" style="border: 1px solid rgba(0, 208, 156, 0.3); background: linear-gradient(135deg, rgba(0, 208, 156, 0.03) 0%, rgba(6, 11, 25, 0.95) 100%);">
+              <div class="card-header">
+                <div>
+                  <h3 class="card-title" style="display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-shield-halved" style="color: var(--accent-emerald);"></i>
+                    Master Reconciliation Audit & Data Integrity Statement
+                  </h3>
+                  <p class="card-subtitle">Verification of financial integrity across the complete STRICTWALLET transaction ledger.</p>
+                </div>
+                <span class="badge badge-success" style="padding: 6px 14px; font-weight: 700;" id="finReconciliationBadge">
+                  <i class="fa-solid fa-check-double"></i> 100% RECONCILED
+                </span>
+              </div>
+
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 14px;">
+                <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Revenue Formula Reconciled</div>
+                  <div style="font-size: 0.85rem; color: #FFF; margin-top: 6px; font-family: var(--font-mono);">
+                    Total Revenue = Airtime + Data + SMS (₦10/alert) + Deposit Charges (₦25/VA) + Withdrawal Fees (₦20/tx) + Event Commission (3%)
+                  </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Expense Formula Reconciled</div>
+                  <div style="font-size: 0.85rem; color: #FFF; margin-top: 6px; font-family: var(--font-mono);">
+                    Total Expenses = Airtime Cost + Data Cost + SMS Provider Cost (₦6/alert) + Deposit Provider Costs + Withdrawal API Costs (₦12/tx)
+                  </div>
+                </div>
+
+                <div style="background: rgba(255,255,255,0.02); padding: 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                  <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Profit Equality Verified</div>
+                  <div style="font-size: 0.85rem; color: var(--accent-emerald); margin-top: 6px; font-family: var(--font-mono); font-weight: 700;">
+                    Total Gross Profit = Total Revenue − Total Expenses = Sum of Individual Service Profits
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top: 16px; padding: 14px; background: rgba(0,0,0,0.3); border-radius: var(--radius-md); font-size: 0.8rem; color: var(--text-muted); line-height: 1.6;">
+                <strong><i class="fa-solid fa-lock"></i> Financial Governance Policy:</strong>
+                Customer wallet balances and deposit transaction volume represent customer liabilities and are never counted as business profit. All figures reflect verified historical records. Zero synthetic data or test accounts were created.
+              </div>
+            </div>
+
           </div>
 
         </section>
@@ -755,6 +1353,102 @@
             </div>
           </div>
 
+        </section>
+
+        <!-- 10. SMS ALERT REVENUE VIEW -->
+        <section id="viewAdminSms" class="view-section">
+          <div class="view-header">
+            <div>
+              <h2 class="view-title">SMS ALERT REVENUE</h2>
+              <p class="view-subtitle">Live financial audit and transaction ledger for Strowallet transactional SMS alerts</p>
+            </div>
+            <button class="btn btn-secondary" onclick="loadAdminSmsRevenue()">
+              <i class="fa-solid fa-arrows-rotate"></i> Refresh SMS Data
+            </button>
+          </div>
+
+          <!-- Financial Breakdown Metric Cards -->
+          <div class="grid-cards-4">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalSent">0</div>
+                  <div class="card-subtitle">Total SMS Alerts Sent</div>
+                </div>
+                <div class="card-icon-badge blue">
+                  <i class="fa-solid fa-comment-sms"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalRevenue" style="color: var(--accent-emerald);">₦0.00</div>
+                  <div class="card-subtitle">SMS Revenue (₦10/Alert)</div>
+                </div>
+                <div class="card-icon-badge emerald">
+                  <i class="fa-solid fa-hand-holding-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalCost" style="color: #f87171;">₦0.00</div>
+                  <div class="card-subtitle">Strowallet Cost (₦6/Alert)</div>
+                </div>
+                <div class="card-icon-badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">
+                  <i class="fa-solid fa-file-invoice-dollar"></i>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title" id="admSmsTotalProfit" style="color: #60a5fa;">₦0.00</div>
+                  <div class="card-subtitle">Gross Profit (₦4/Alert)</div>
+                </div>
+                <div class="card-icon-badge purple">
+                  <i class="fa-solid fa-chart-line"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Audit Ledger Table -->
+          <div class="card" style="margin-top: 24px;">
+            <div class="card-header">
+              <div>
+                <h3 class="card-title">SMS Transaction History & Audit Ledger</h3>
+                <p class="card-subtitle">Associated customer transactions, provider responses, and fee records</p>
+              </div>
+            </div>
+
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ref / Alert ID</th>
+                    <th>User / Phone</th>
+                    <th>Alert Type</th>
+                    <th>Tx Amount</th>
+                    <th>Applicable Balance</th>
+                    <th>Customer Charge</th>
+                    <th>Provider Cost</th>
+                    <th>STRICTWALLET Profit</th>
+                    <th>Status</th>
+                    <th>Date & Time</th>
+                  </tr>
+                </thead>
+                <tbody id="admSmsTableBody">
+                  <tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);">Loading SMS alert records...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
       </main>

@@ -194,7 +194,10 @@ function navigateToView(viewId) {
   if (viewId === 'viewTransactions') loadAllTransactions();
   if (viewId === 'viewSupport') loadUserTickets();
   if (viewId === 'viewEvents') loadMarketplaceEvents();
-  if (viewId === 'viewSettings') loadOrganizerWallet();
+  if (viewId === 'viewSettings') {
+    loadOrganizerWallet();
+    renderSettingsNameUpdateUI();
+  }
   if (viewId === 'viewData') {
     renderPlanCategories();
     renderDataPlans();
@@ -544,6 +547,15 @@ async function initUserSession() {
 
   if (profileRes.ok && profileRes.data.success) {
     State.user = profileRes.data.user;
+    if (State.user) {
+      if (!State.user.fullName && (State.user.firstName || State.user.lastName)) {
+        State.user.fullName = `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
+      } else if (State.user.fullName && (!State.user.firstName || !State.user.lastName)) {
+        const parts = State.user.fullName.trim().split(/\s+/);
+        if (!State.user.firstName) State.user.firstName = parts[0] || '';
+        if (!State.user.lastName) State.user.lastName = parts.slice(1).join(' ') || State.user.firstName;
+      }
+    }
     updateUserInterface();
   } else {
     logoutUser(false);
@@ -599,12 +611,14 @@ async function initUserSession() {
 function updateUserInterface() {
   if (!State.user) return;
   
-  document.getElementById('sidebarUserName').innerText = State.user.fullName;
+  const displayName = State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim() || 'STRICTWALLET User';
+  document.getElementById('sidebarUserName').innerText = displayName;
   document.getElementById('sidebarUserEmail').innerText = State.user.email;
-  document.getElementById('sidebarUserAvatar').innerText = State.user.fullName.charAt(0).toUpperCase();
+  document.getElementById('sidebarUserAvatar').innerText = displayName.charAt(0).toUpperCase() || 'U';
 
   // Settings view inputs
-  document.getElementById('setFullName').value = State.user.fullName;
+  const setFullNameEl = document.getElementById('setFullName');
+  if (setFullNameEl) setFullNameEl.value = displayName;
   document.getElementById('setEmail').value = State.user.email;
   document.getElementById('setPhone').value = State.user.phone;
   document.getElementById('setNextOfKin').value = State.user.nextOfKin || 'N/A';
@@ -614,6 +628,9 @@ function updateUserInterface() {
   if (currentPinGroup) {
     currentPinGroup.style.display = State.user.hasPin ? 'block' : 'none';
   }
+
+  // Update Settings Old User Name Update & Virtual Account UI
+  renderSettingsNameUpdateUI();
 }
 
 // Fetch admin-configured social media links and render them into the user-facing grid
@@ -677,7 +694,8 @@ function renderWalletOverview(overviewData) {
   // Format Balances
   updateBalanceDisplay();
 
-  // Virtual account removed.
+  // Render Sterling Bank Virtual Account Card
+  renderSterlingAccount(w);
 
   // Statistics
   document.getElementById('statTotalDeposits').innerText = formatNaira(w.totalDeposited);
@@ -688,20 +706,544 @@ function renderWalletOverview(overviewData) {
   renderRecentTransactions(overviewData.recentTransactions || []);
 }
 
+// Render Sterling Bank Virtual Account details or generate button
+function renderSterlingAccount(wallet) {
+  const notGenEl = document.getElementById('sterlingAccountNotGenerated');
+  const activeEl = document.getElementById('sterlingAccountActive');
+  const bankNameEl = document.getElementById('sterlingBankNameDisplay');
+  const accNumEl = document.getElementById('sterlingAccountNumberDisplay');
+  const accNameEl = document.getElementById('sterlingAccountNameDisplay');
+  const errEl = document.getElementById('generateAccountErrorMsg');
+
+  if (!notGenEl || !activeEl) return;
+
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.innerText = '';
+  }
+
+  const virtualAcc = (wallet && wallet.virtualAccountNumber) || (State.user && State.user.virtualAccountNumber);
+
+  if (virtualAcc) {
+    // Virtual account exists: Display details, hide generation button
+    notGenEl.style.display = 'none';
+    activeEl.style.display = 'flex';
+
+    if (bankNameEl) bankNameEl.innerText = (wallet && wallet.virtualBankName) || (State.user && State.user.virtualBankName) || 'Sterling Bank';
+    if (accNumEl) accNumEl.innerText = virtualAcc;
+    if (accNameEl) accNameEl.innerText = (wallet && wallet.virtualAccountName) || (State.user && (State.user.virtualAccountName || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim())) || 'STRICTWALLET Customer';
+  } else {
+    // Virtual account not yet generated: Show generate button for authenticated user, hide details
+    notGenEl.style.display = 'flex';
+    activeEl.style.display = 'none';
+    const btn = document.getElementById('btnGenerateVirtualAccount');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+  }
+
+  // Synchronize Settings view virtual account UI as well
+  renderSettingsNameUpdateUI();
+}
+
+// Render Settings Old User Name Update UI and Virtual Account actions
+function renderSettingsNameUpdateUI() {
+  const actionContainer = document.getElementById('settingsUpdateDetailsAction');
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  const vaPrompt = document.getElementById('settingsVirtualAccountPrompt');
+  const vaDisplay = document.getElementById('settingsVirtualAccountDisplay');
+
+  if (!actionContainer) return;
+
+  const user = State.user;
+  if (!user || user.role === 'admin') {
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+    if (vaDisplay) vaDisplay.style.display = 'none';
+    return;
+  }
+
+  const virtualAcc = (State.wallet && State.wallet.virtualAccountNumber) || user.virtualAccountNumber;
+
+  // Case 1: Virtual account is already assigned
+  if (virtualAcc) {
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+    if (vaDisplay) {
+      vaDisplay.style.display = 'block';
+      const bankNameEl = document.getElementById('settingsBankNameDisplay');
+      const accNumEl = document.getElementById('settingsAccountNumberDisplay');
+      const accNameEl = document.getElementById('settingsAccountNameDisplay');
+      if (bankNameEl) bankNameEl.innerText = (State.wallet && State.wallet.virtualBankName) || user.virtualBankName || 'Sterling Bank';
+      if (accNumEl) accNumEl.innerText = virtualAcc;
+      if (accNameEl) accNameEl.innerText = (State.wallet && State.wallet.virtualAccountName) || user.virtualAccountName || user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'STRICTWALLET Customer';
+    }
+    return;
+  }
+
+  // Case 2: Virtual account not yet generated
+  if (vaDisplay) vaDisplay.style.display = 'none';
+
+  // Eligibility: Old users whose names are still in old Full Name format and need separate First & Last Name
+  const isEligibleOldUser = Boolean(
+    (user.needsNameUpdate === true || (!user.nameDetailsUpdated && !user.rawHasSeparateNames)) &&
+    user.nameDetailsUpdated !== true
+  );
+
+  if (isEligibleOldUser) {
+    // Show Update Details button directly below account information
+    actionContainer.style.display = 'block';
+    if (vaPrompt) vaPrompt.style.display = 'none';
+  } else {
+    // User already completed name update or registered as a new user
+    actionContainer.style.display = 'none';
+    if (formContainer) formContainer.style.display = 'none';
+
+    // Allow old users (and new users without VA) to generate a virtual account number
+    if (vaPrompt) {
+      vaPrompt.style.display = 'block';
+      const promptBtn = document.getElementById('btnSettingsGenerateVirtualAccount');
+      if (promptBtn) {
+        promptBtn.disabled = false;
+        promptBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+    }
+  }
+}
+
+// Open the Update Details Form for eligible old users
+function openUpdateDetailsForm() {
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  if (!formContainer) return;
+
+  formContainer.style.display = 'block';
+
+  // Clear previous errors
+  const fnInput = document.getElementById('updateFirstName');
+  const lnInput = document.getElementById('updateLastName');
+  const fnErr = document.getElementById('updateFirstNameError');
+  const lnErr = document.getElementById('updateLastNameError');
+  const globalErr = document.getElementById('updateNameGlobalError');
+
+  if (fnErr) { fnErr.style.display = 'none'; fnErr.innerText = ''; }
+  if (lnErr) { lnErr.style.display = 'none'; lnErr.innerText = ''; }
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+
+  if (fnInput && !fnInput.value && State.user) {
+    fnInput.value = State.user.firstName || (State.user.fullName ? State.user.fullName.split(' ')[0] : '');
+  }
+  if (lnInput && !lnInput.value && State.user) {
+    lnInput.value = State.user.lastName || (State.user.fullName ? State.user.fullName.split(' ').slice(1).join(' ') : '');
+  }
+
+  if (fnInput) fnInput.focus();
+}
+
+// Cancel updating details
+function cancelUpdateDetailsForm() {
+  const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+  if (formContainer) formContainer.style.display = 'none';
+  const globalErr = document.getElementById('updateNameGlobalError');
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+}
+
+// Submit First Name and Last Name update
+async function submitUpdateNameDetails(event) {
+  if (event) event.preventDefault();
+
+  const fnInput = document.getElementById('updateFirstName');
+  const lnInput = document.getElementById('updateLastName');
+  const fnErr = document.getElementById('updateFirstNameError');
+  const lnErr = document.getElementById('updateLastNameError');
+  const globalErr = document.getElementById('updateNameGlobalError');
+  const saveBtn = document.getElementById('btnSaveNameDetails');
+
+  if (fnErr) { fnErr.style.display = 'none'; fnErr.innerText = ''; }
+  if (lnErr) { lnErr.style.display = 'none'; lnErr.innerText = ''; }
+  if (globalErr) { globalErr.style.display = 'none'; globalErr.innerText = ''; }
+
+  const firstName = (fnInput?.value || '').trim();
+  const lastName = (lnInput?.value || '').trim();
+
+  let hasError = false;
+
+  // Validation: reject empty or whitespace-only values
+  if (!firstName) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name is required and cannot be empty or whitespace only.';
+      fnErr.style.display = 'block';
+    }
+    if (fnInput) fnInput.focus();
+    hasError = true;
+  } else if (firstName.length < 2) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name must be at least 2 characters.';
+      fnErr.style.display = 'block';
+    }
+    if (fnInput) fnInput.focus();
+    hasError = true;
+  }
+
+  if (!lastName) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name is required and cannot be empty or whitespace only.';
+      lnErr.style.display = 'block';
+    }
+    if (!hasError && lnInput) lnInput.focus();
+    hasError = true;
+  } else if (lastName.length < 2) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name must be at least 2 characters.';
+      lnErr.style.display = 'block';
+    }
+    if (!hasError && lnInput) lnInput.focus();
+    hasError = true;
+  }
+
+  const namePattern = /^[A-Za-z\s'-]+$/;
+  if (firstName && !namePattern.test(firstName)) {
+    if (fnErr) {
+      fnErr.innerText = 'First Name can only contain letters, spaces, hyphens, and apostrophes.';
+      fnErr.style.display = 'block';
+    }
+    hasError = true;
+  }
+  if (lastName && !namePattern.test(lastName)) {
+    if (lnErr) {
+      lnErr.innerText = 'Last Name can only contain letters, spaces, hyphens, and apostrophes.';
+      lnErr.style.display = 'block';
+    }
+    hasError = true;
+  }
+
+  if (hasError) return;
+
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+  }
+
+  try {
+    const { ok, data } = await authFetch('/auth/update-name', {
+      method: 'POST',
+      body: JSON.stringify({ firstName, lastName })
+    });
+
+    if (ok && data.success && data.user) {
+      // Update client-side user state
+      State.user.firstName = data.user.firstName;
+      State.user.lastName = data.user.lastName;
+      State.user.fullName = data.user.fullName;
+      State.user.needsNameUpdate = false;
+      State.user.nameDetailsUpdated = true;
+      State.user.rawHasSeparateNames = true;
+
+      // Refresh displayed account details
+      updateUserInterface();
+
+      showToast('Name details updated successfully!', 'success');
+
+      // The button and form disappear
+      const actionContainer = document.getElementById('settingsUpdateDetailsAction');
+      const formContainer = document.getElementById('settingsUpdateDetailsFormContainer');
+      if (actionContainer) actionContainer.style.display = 'none';
+      if (formContainer) formContainer.style.display = 'none';
+
+      // Provide clear action to Generate Virtual Account Number
+      const vaPrompt = document.getElementById('settingsVirtualAccountPrompt');
+      if (vaPrompt && !State.user.virtualAccountNumber) {
+        vaPrompt.style.display = 'block';
+      }
+    } else {
+      const errMsg = data?.message || 'Failed to update name details. Please try again.';
+      if (globalErr) {
+        globalErr.innerText = errMsg;
+        globalErr.style.display = 'block';
+      }
+      showToast(errMsg, 'error');
+    }
+  } catch (err) {
+    console.error('[Update Name Error]:', err);
+    const errMsg = 'Network error saving name details. Please check connection and retry.';
+    if (globalErr) {
+      globalErr.innerText = errMsg;
+      globalErr.style.display = 'block';
+    }
+    showToast(errMsg, 'error');
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Save Details';
+    }
+  }
+}
+
+// Settings shortcut to initiate virtual account generation
+function triggerVirtualAccountGenerationFromSettings() {
+  generateSterlingVirtualAccount();
+}
+
+// Copy Virtual Account Number in Settings
+function copySettingsVirtualAccount() {
+  const accNum = document.getElementById('settingsAccountNumberDisplay')?.innerText?.trim();
+  if (!accNum || accNum === '--') return;
+  navigator.clipboard.writeText(accNum).then(() => {
+    showToast('Virtual account number copied to clipboard!', 'success');
+  }).catch(() => {
+    showToast('Failed to copy account number.', 'warning');
+  });
+}
+
+// Generate Sterling Bank virtual account for existing users
+async function generateSterlingVirtualAccount() {
+  const btn = document.getElementById('btnGenerateVirtualAccount');
+  const settingsBtn = document.getElementById('btnSettingsGenerateVirtualAccount');
+  const errEl = document.getElementById('generateAccountErrorMsg');
+  const settingsErrEl = document.getElementById('settingsVirtualAccountErrorMsg');
+
+  if (errEl) {
+    errEl.style.display = 'none';
+    errEl.innerText = '';
+  }
+  if (settingsErrEl) {
+    settingsErrEl.style.display = 'none';
+    settingsErrEl.innerText = '';
+  }
+
+  // Ensure eligible old users update their name details first
+  if (State.user && State.user.needsNameUpdate) {
+    showToast('Please update your First Name and Last Name in Settings before generating an account.', 'warning');
+    navigateToView('viewSettings');
+    openUpdateDetailsForm();
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generating Account...';
+  }
+  if (settingsBtn) {
+    settingsBtn.disabled = true;
+    settingsBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Generating Account...';
+  }
+
+  try {
+    const payload = {};
+    if (State.user) {
+      if (State.user.firstName) payload.firstName = State.user.firstName;
+      if (State.user.lastName) payload.lastName = State.user.lastName;
+    }
+
+    const { ok, data } = await authFetch('/wallet/virtual-account/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
+    if (ok && data.success && data.virtualAccount) {
+      const va = data.virtualAccount;
+      if (State.wallet) {
+        State.wallet.virtualAccountNumber = va.accountNumber;
+        State.wallet.virtualBankName = va.bankName || 'Sterling Bank';
+        State.wallet.virtualAccountName = va.accountName;
+      }
+      if (State.user) {
+        State.user.virtualAccountNumber = va.accountNumber;
+        State.user.virtualBankName = va.bankName || 'Sterling Bank';
+        State.user.virtualAccountName = va.accountName;
+      }
+
+      renderSterlingAccount(State.wallet);
+      renderSettingsNameUpdateUI();
+      showToast('Sterling Bank virtual account generated successfully!', 'success');
+
+      // Refresh overview from backend
+      const ovRes = await authFetch('/wallet/overview');
+      if (ovRes.ok && ovRes.data.success) {
+        renderWalletOverview(ovRes.data);
+      }
+    } else {
+      const errMsg = data?.message || 'Unable to generate Sterling Bank virtual account. Please try again.';
+      if (errEl) {
+        errEl.innerText = errMsg;
+        errEl.style.display = 'block';
+      }
+      if (settingsErrEl) {
+        settingsErrEl.innerText = errMsg;
+        settingsErrEl.style.display = 'block';
+      }
+      showToast(errMsg, 'error');
+
+      // Re-enable button so user can retry without having to repeat name-update process
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+      if (settingsBtn) {
+        settingsBtn.disabled = false;
+        settingsBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+      }
+    }
+  } catch (err) {
+    console.error('Error generating virtual account:', err);
+    const errMsg = 'Connection error. Please try again shortly.';
+    if (errEl) {
+      errEl.innerText = errMsg;
+      errEl.style.display = 'block';
+    }
+    if (settingsErrEl) {
+      settingsErrEl.innerText = errMsg;
+      settingsErrEl.style.display = 'block';
+    }
+    showToast(errMsg, 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+    if (settingsBtn) {
+      settingsBtn.disabled = false;
+      settingsBtn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> Generate Virtual Account Number';
+    }
+  }
+}
+
+// Copy Sterling Bank account number with toast notification and button feedback
+function copySterlingAccountNumber() {
+  const accNumEl = document.getElementById('sterlingAccountNumberDisplay');
+  const copyText = document.getElementById('copySterlingText');
+  const copyIcon = document.getElementById('copySterlingIcon');
+
+  const accNum = accNumEl ? accNumEl.innerText.trim() : '';
+  if (!accNum || accNum === '----------') {
+    showToast('No account number to copy', 'warning');
+    return;
+  }
+
+  const handleSuccess = () => {
+    if (copyText) copyText.innerText = 'Copied!';
+    if (copyIcon) copyIcon.className = 'fa-solid fa-check';
+    showToast('Sterling Bank account number copied to clipboard!', 'success');
+    setTimeout(() => {
+      if (copyText) copyText.innerText = 'Copy';
+      if (copyIcon) copyIcon.className = 'fa-regular fa-copy';
+    }, 2500);
+  };
+
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(accNum).then(handleSuccess).catch(() => {
+      fallbackCopy(accNum, handleSuccess);
+    });
+  } else {
+    fallbackCopy(accNum, handleSuccess);
+  }
+}
+
+function fallbackCopy(text, onSuccess) {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+    if (typeof onSuccess === 'function') onSuccess();
+    else showToast('Sterling Bank account number copied!', 'success');
+  } catch (err) {
+    showToast('Could not copy automatically. Account number: ' + text, 'info');
+  }
+  document.body.removeChild(textArea);
+}
+
 function updateBalanceDisplay() {
   const balance = State.wallet ? State.wallet.balance : 0;
   const topbarEl = document.getElementById('topbarBalance');
   const dashBalEl = document.getElementById('dashboardBalanceAmount');
+  const modalMainAvailEl = document.getElementById('modalMainWalletAvail');
   const eyeIcon = document.getElementById('eyeIcon');
 
   if (State.balanceHidden) {
-    topbarEl.innerText = '₦••••••';
-    dashBalEl.innerText = '₦••••••';
+    if (topbarEl) topbarEl.innerText = '₦••••••';
+    if (dashBalEl) dashBalEl.innerText = '₦••••••';
     if (eyeIcon) eyeIcon.className = 'fa-regular fa-eye-slash';
   } else {
-    topbarEl.innerText = formatNaira(balance);
-    dashBalEl.innerText = formatNaira(balance);
+    if (topbarEl) topbarEl.innerText = formatNaira(balance);
+    if (dashBalEl) dashBalEl.innerText = formatNaira(balance);
     if (eyeIcon) eyeIcon.className = 'fa-regular fa-eye';
+  }
+
+  if (modalMainAvailEl) modalMainAvailEl.innerText = formatNaira(balance);
+
+  const mainWthAvailEl = document.getElementById('mainWthAvailableBalanceDisplay');
+  if (mainWthAvailEl) mainWthAvailEl.innerText = formatNaira(balance);
+
+  renderSmsAlertSettingsUI();
+}
+
+function renderSmsAlertSettingsUI() {
+  const enabled = !!(State.user?.smsAlertsEnabled || State.wallet?.smsAlertsEnabled);
+  const phone = State.user?.phone || State.wallet?.phone || '--';
+
+  const statusVal = document.getElementById('smsAlertsStatusVal');
+  if (statusVal) {
+    if (enabled) {
+      statusVal.innerText = 'ON';
+      statusVal.style.color = 'var(--accent-emerald)';
+    } else {
+      statusVal.innerText = 'OFF';
+      statusVal.style.color = '#f87171';
+    }
+  }
+
+  const btnToggle = document.getElementById('btnToggleSmsAlerts');
+  if (btnToggle) {
+    if (enabled) {
+      btnToggle.innerText = 'TURN OFF';
+      btnToggle.className = 'btn btn-secondary';
+      btnToggle.style.background = 'rgba(239, 68, 68, 0.2)';
+      btnToggle.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+      btnToggle.style.color = '#f87171';
+    } else {
+      btnToggle.innerText = 'TURN ON';
+      btnToggle.className = 'btn btn-primary';
+      btnToggle.style.background = '';
+      btnToggle.style.borderColor = '';
+      btnToggle.style.color = '';
+    }
+  }
+
+  const phoneEl = document.getElementById('smsAlertsPhoneDisplay');
+  if (phoneEl) phoneEl.innerText = phone;
+}
+
+async function toggleSmsAlerts() {
+  const currentlyEnabled = !!(State.user?.smsAlertsEnabled || State.wallet?.smsAlertsEnabled);
+  const newStatus = !currentlyEnabled;
+  const btn = document.getElementById('btnToggleSmsAlerts');
+  if (btn) btn.disabled = true;
+
+  try {
+    const { ok, data } = await authFetch('/wallet/sms/settings', {
+      method: 'POST',
+      body: JSON.stringify({ enabled: newStatus })
+    });
+
+    if (ok && data.success) {
+      if (State.user) State.user.smsAlertsEnabled = data.smsAlertsEnabled;
+      if (State.wallet) State.wallet.smsAlertsEnabled = data.smsAlertsEnabled;
+      renderSmsAlertSettingsUI();
+      showToast(data.message, 'success');
+    } else {
+      showToast(data?.message || 'Failed to update SMS alert preference.', 'error');
+    }
+  } catch (err) {
+    console.error('Error toggling SMS alerts:', err);
+    showToast('Network error updating SMS settings.', 'error');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -723,12 +1265,13 @@ function renderRecentTransactions(transactions) {
 
     let typeIcon = tx.type === 'deposit' ? '<i class="fa-solid fa-arrow-down" style="color: var(--accent-emerald);"></i> Deposit' : 
                    tx.type === 'airtime' ? '<i class="fa-solid fa-mobile-screen-button" style="color: #38BDF8;"></i> Airtime' : 
+                   tx.type === 'withdrawal' ? '<i class="fa-solid fa-arrow-up-from-bracket" style="color: #F87171;"></i> Withdrawal' :
                    '<i class="fa-solid fa-wifi" style="color: #8B5CF6;"></i> Data';
 
     const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
 
     return `
-      <tr ${isPending ? `style="cursor: pointer;" onclick="checkDepositStatusWithModal('${tx.providerReference || tx.id}', ${tx.amount})" title="Click to verify status"` : ''}>
+      <tr ${isPending ? `style="cursor: pointer;" onclick="checkDepositStatusWithModal('${tx.providerReference || tx.id}', ${tx.amount})" title="Click to verify status"` : `style="cursor: pointer;" onclick='showReceiptModal(${JSON.stringify(tx).replace(/'/g, "&apos;")})' title="Click to view details"`}>
         <td><strong>${typeIcon}</strong></td>
         <td>
           <div>${tx.description || tx.id}</div>
@@ -818,12 +1361,56 @@ function setupEventListeners() {
   // 1. REGISTRATION SUBMISSION
   document.getElementById('registerForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fullName = document.getElementById('regFullName').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
-    const phone = document.getElementById('regPhone').value.trim();
-    const nextOfKin = document.getElementById('regNextOfKin').value.trim();
-    const password = document.getElementById('regPassword').value;
-    const confirmPassword = document.getElementById('regConfirmPassword').value;
+    const firstName = document.getElementById('regFirstName')?.value.trim() || '';
+    const lastName = document.getElementById('regLastName')?.value.trim() || '';
+    const email = document.getElementById('regEmail')?.value.trim() || '';
+    const phone = document.getElementById('regPhone')?.value.trim() || '';
+    const nextOfKin = document.getElementById('regNextOfKin')?.value.trim() || '';
+    const password = document.getElementById('regPassword')?.value || '';
+    const confirmPassword = document.getElementById('regConfirmPassword')?.value || '';
+
+    // Validation
+    if (!firstName) {
+      showToast('First Name is required.', 'warning');
+      document.getElementById('regFirstName')?.focus();
+      return;
+    }
+
+    if (!lastName) {
+      showToast('Last Name is required.', 'warning');
+      document.getElementById('regLastName')?.focus();
+      return;
+    }
+
+    if (!email) {
+      showToast('Email address is required.', 'warning');
+      document.getElementById('regEmail')?.focus();
+      return;
+    }
+
+    if (!phone) {
+      showToast('Phone number is required.', 'warning');
+      document.getElementById('regPhone')?.focus();
+      return;
+    }
+
+    if (!nextOfKin) {
+      showToast('Security question (Next of Kin) is required.', 'warning');
+      document.getElementById('regNextOfKin')?.focus();
+      return;
+    }
+
+    if (!password) {
+      showToast('Password is required.', 'warning');
+      document.getElementById('regPassword')?.focus();
+      return;
+    }
+
+    if (!confirmPassword) {
+      showToast('Please confirm your password.', 'warning');
+      document.getElementById('regConfirmPassword')?.focus();
+      return;
+    }
 
     if (!checkPasswordStrength(password, '')) {
       showToast('Please ensure your password satisfies all 5 security requirements.', 'warning');
@@ -841,7 +1428,16 @@ function setupEventListeners() {
 
     const { ok, data } = await authFetch('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ fullName, email, phone, nextOfKin, password, confirmPassword })
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        fullName: `${firstName} ${lastName}`.trim(),
+        email,
+        phone,
+        nextOfKin,
+        password,
+        confirmPassword
+      })
     });
 
     btn.disabled = false;
@@ -1513,7 +2109,9 @@ async function loadAllTransactions() {
       const isPending = (tx.status === 'Pending' || tx.status === 'Processing') && tx.type === 'deposit';
       const channelDisplay = tx.type === 'deposit'
         ? (tx.channel ? `<span style="text-transform: capitalize; color: var(--accent-blue-light);"><i class="fa-solid fa-credit-card"></i> ${tx.channel}</span>` : '<span style="color: var(--text-muted);">Paystack</span>')
-        : (tx.phoneNumber ? `<span style="font-family: var(--font-mono);">${tx.phoneNumber}</span>` : '-');
+        : (tx.type === 'withdrawal'
+          ? `<span style="color: var(--accent-emerald);"><i class="fa-solid fa-building-columns"></i> ${escapeHTML(tx.bankName || 'Bank')}</span>`
+          : (tx.phoneNumber ? `<span style="font-family: var(--font-mono);">${tx.phoneNumber}</span>` : '-'));
 
       return `
         <tr>
@@ -1555,11 +2153,12 @@ function showReceiptModal(tx) {
   else if (tx.status === 'Cancelled') badgeClass = 'badge-cancelled';
 
   const isDeposit = tx.type === 'deposit';
+  const isWithdrawal = tx.type === 'withdrawal';
 
   body.innerHTML = `
     <div style="text-align: center; margin-bottom: 20px;">
-      <img src="Image.png" alt="STRICTWALLET" style="height: 44px; margin-bottom: 8px;">
-      <h3 style="font-size: 1.1rem; color: #FFF;">STRICTWALLET TRANSACTION RECEIPT</h3>
+      <img src="Image.png" alt="STRICTWALLET" style="height: 44px; margin-bottom: 8px;" onerror="this.style.display='none'">
+      <h3 style="font-size: 1.1rem; color: #FFF;">STRICTWALLET ${isWithdrawal ? 'WITHDRAWAL' : 'TRANSACTION'} RECEIPT</h3>
       <span class="badge ${badgeClass}" style="margin-top: 6px;">${tx.status}</span>
     </div>
 
@@ -1570,17 +2169,44 @@ function showReceiptModal(tx) {
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Reference:</span>
-        <span style="color: #FFF; font-family: var(--font-mono); font-size: 0.82rem;">${tx.paystackReference || tx.providerReference || tx.id}</span>
+        <span style="color: #FFF; font-family: var(--font-mono); font-size: 0.82rem;">${tx.providerReference || tx.paystackReference || tx.id}</span>
       </div>
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Transaction Type:</span>
-        <strong style="color: #FFF; text-transform: uppercase;">${tx.type}</strong>
+        <strong style="color: #FFF; text-transform: uppercase;">${isWithdrawal ? 'MAIN WALLET WITHDRAWAL' : tx.type}</strong>
       </div>
       ${isDeposit && tx.channel ? `
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Payment Channel:</span>
         <span style="color: #FFF; text-transform: capitalize;">${tx.channel}${tx.cardType ? ` (${tx.cardType})` : ''}${tx.bank ? ` - ${tx.bank}` : ''}</span>
       </div>` : ''}
+      ${isWithdrawal ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Destination Bank:</span>
+        <strong style="color: #FFF;">${escapeHTML(tx.bankName || 'Bank')}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Account Name:</span>
+        <strong style="color: #FFF;">${escapeHTML(tx.accountName || '-')}</strong>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Account Number:</span>
+        <span style="color: #FFF; font-family: var(--font-mono);">${formatMaskedAccount(tx.accountNumber)}</span>
+      </div>
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Withdrawal Fee:</span>
+        <span style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(tx.charge || 20)}</span>
+      </div>
+      ${tx.stampDuty && tx.stampDuty > 0 ? `
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Stamp Duty:</span>
+        <span style="color: var(--text-secondary); font-family: var(--font-mono);">${formatNaira(tx.stampDuty)}</span>
+      </div>` : ''}
+      <div style="display: flex; justify-content: space-between;">
+        <span style="color: var(--text-muted);">Total Wallet Deducted:</span>
+        <strong style="color: #FFF; font-family: var(--font-mono);">${formatNaira(tx.totalDeducted || (tx.amount + (tx.charge || 20) + (tx.stampDuty || 0)))}</strong>
+      </div>
+      ` : ''}
       ${tx.network ? `
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Network:</span>
@@ -1595,19 +2221,316 @@ function showReceiptModal(tx) {
         <span style="color: var(--text-muted);">Date & Time:</span>
         <span style="color: #FFF;">${formatDateTime(tx.createdAt)}</span>
       </div>
-      ${tx.fee && tx.fee > 0 ? `
+      ${!isWithdrawal && tx.fee && tx.fee > 0 ? `
       <div style="display: flex; justify-content: space-between;">
         <span style="color: var(--text-muted);">Processing Fee:</span>
         <span style="color: var(--text-muted); font-family: var(--font-mono);">${formatNaira(tx.fee)}</span>
       </div>` : ''}
       <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--border-color); padding-top: 10px; font-size: 1.1rem;">
-        <span style="color: var(--text-muted);">${isDeposit ? 'Amount Credited:' : 'Amount Paid:'}</span>
+        <span style="color: var(--text-muted);">${isDeposit ? 'Amount Credited:' : (isWithdrawal ? 'Amount Sent to Bank:' : 'Amount Paid:')}</span>
         <strong style="color: var(--accent-emerald); font-family: var(--font-mono);">${formatNaira(tx.amount)}</strong>
       </div>
     </div>
+
+    ${tx.status === 'Failed' && tx.failureReason ? `
+    <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-sm); padding: 10px 14px; margin-top: 12px; color: #FCA5A5; font-size: 0.82rem; line-height: 1.45;">
+      <i class="fa-solid fa-triangle-exclamation"></i> <strong>Failure Reason:</strong> ${escapeHTML(tx.failureReason)}
+      <div style="font-size: 0.75rem; color: #F87171; margin-top: 4px;">Your Main Wallet balance has been safely restored.</div>
+    </div>` : ''}
   `;
 
   openModal('txReceiptModal');
+}
+
+// -------------------------------------------------------------
+// MAIN WALLET BANK WITHDRAWAL
+// -------------------------------------------------------------
+
+async function openMainWalletWithdrawalModal() {
+  if (!State.token || !State.user) {
+    showToast('Please sign in to access your wallet.', 'info');
+    return;
+  }
+
+  const currentBal = State.wallet ? (State.wallet.balance || 0) : 0;
+  const availDisplay = document.getElementById('mainWthAvailableBalanceDisplay');
+  if (availDisplay) availDisplay.innerText = formatNaira(currentBal);
+
+  const amountEl = document.getElementById('mainWthAmount');
+  if (amountEl) amountEl.value = '';
+
+  const accNumEl = document.getElementById('mainWthAccountNumber');
+  if (accNumEl) accNumEl.value = '';
+
+  const narrationEl = document.getElementById('mainWthNarration');
+  if (narrationEl) narrationEl.value = 'Wallet withdrawal';
+
+  const pinEl = document.getElementById('mainWthPin');
+  if (pinEl) pinEl.value = '';
+
+  const refEl = document.getElementById('mainWthNameEnquiryRef');
+  if (refEl) refEl.value = '';
+
+  const nameDisplay = document.getElementById('mainWthAccountNameDisplay');
+  if (nameDisplay) {
+    nameDisplay.innerText = 'Enter 10-digit account number to verify owner name...';
+    nameDisplay.style.color = 'var(--text-muted)';
+  }
+
+  calculateMainWithdrawalTotal();
+  openModal('mainWalletWithdrawModal');
+  loadMainWalletBanks();
+}
+
+async function loadMainWalletBanks(force = false) {
+  const select = document.getElementById('mainWthBankSelect');
+  if (!select) return;
+
+  // Already populated with options
+  if (!force && State.strowalletBanks && State.strowalletBanks.length > 0 && select.options.length > 2) {
+    return;
+  }
+
+  // If in state already, populate immediately
+  if (State.strowalletBanks && State.strowalletBanks.length > 0) {
+    const currentVal = select.value;
+    select.innerHTML = '<option value="">-- Choose destination bank --</option>' + 
+      State.strowalletBanks.map(b => `<option value="${b.code}" data-name="${escapeHTML(b.name)}">${escapeHTML(b.name)}</option>`).join('');
+    if (currentVal) select.value = currentVal;
+    return;
+  }
+
+  select.innerHTML = '<option value="">-- Loading Nigerian banks... --</option>';
+
+  try {
+    let { ok, data } = await authFetch('/wallet/withdraw/banks');
+    if (!ok || !data?.success) {
+      // Fallback to events bank list if needed
+      const fb = await authFetch('/events/withdrawals/banks');
+      if (fb.ok && fb.data?.success) {
+        ok = true;
+        data = fb.data;
+      }
+    }
+
+    if (ok && data?.success && Array.isArray(data.banks) && data.banks.length > 0) {
+      State.strowalletBanks = data.banks;
+      const currentVal = select.value;
+      select.innerHTML = '<option value="">-- Choose destination bank --</option>' + 
+        data.banks.map(b => `<option value="${b.code}" data-name="${escapeHTML(b.name)}">${escapeHTML(b.name)}</option>`).join('');
+      if (currentVal) select.value = currentVal;
+    } else {
+      select.innerHTML = '<option value="">-- Failed to load banks, click to retry --</option>';
+    }
+  } catch (err) {
+    console.error('Error loading banks for main wallet:', err);
+    select.innerHTML = '<option value="">-- Failed to load banks, click to retry --</option>';
+  }
+}
+
+function calculateMainWithdrawalTotal() {
+  const amountInput = document.getElementById('mainWthAmount');
+  const stampDutyDisplay = document.getElementById('mainWthStampDutyDisplay');
+  const totalDeductionDisplay = document.getElementById('mainWthTotalDeductionDisplay');
+  const receiveAmountDisplay = document.getElementById('mainWthReceiveAmountDisplay');
+
+  const amount = parseFloat(amountInput ? amountInput.value : 0);
+
+  const stampDuty = (!isNaN(amount) && amount >= 10000) ? 50.00 : 0.00;
+  if (stampDutyDisplay) {
+    stampDutyDisplay.innerText = formatNaira(stampDuty);
+  }
+
+  if (!isNaN(amount) && amount > 0) {
+    const charge = 20.00;
+    const total = Math.round((amount + charge + stampDuty) * 100) / 100;
+    if (totalDeductionDisplay) totalDeductionDisplay.innerText = formatNaira(total);
+    if (receiveAmountDisplay) receiveAmountDisplay.innerText = formatNaira(amount);
+  } else {
+    if (totalDeductionDisplay) totalDeductionDisplay.innerText = '₦0.00';
+    if (receiveAmountDisplay) receiveAmountDisplay.innerText = '₦0.00';
+  }
+}
+
+function onMainBankSelectionChange() {
+  const accNum = document.getElementById('mainWthAccountNumber')?.value.trim() || '';
+  if (accNum.length === 10) {
+    verifyMainWalletAccount();
+  }
+}
+
+let verifyMainAccTimeout = null;
+function onMainAccountNumberInput(el) {
+  el.value = el.value.replace(/\D/g, '');
+  if (el.value.length === 10) {
+    clearTimeout(verifyMainAccTimeout);
+    verifyMainAccTimeout = setTimeout(verifyMainWalletAccount, 400);
+  } else {
+    const display = document.getElementById('mainWthAccountNameDisplay');
+    if (display) {
+      display.innerText = 'Enter 10-digit account number to verify owner name...';
+      display.style.color = 'var(--text-muted)';
+    }
+    const refEl = document.getElementById('mainWthNameEnquiryRef');
+    if (refEl) refEl.value = '';
+  }
+}
+
+async function verifyMainWalletAccount() {
+  const bankSelect = document.getElementById('mainWthBankSelect');
+  const bankCode = bankSelect?.value;
+  const accountNumber = document.getElementById('mainWthAccountNumber')?.value.trim();
+  const display = document.getElementById('mainWthAccountNameDisplay');
+
+  if (!display) return;
+
+  if (!bankCode) {
+    display.innerText = 'Please select a destination bank first.';
+    display.style.color = 'var(--status-warning)';
+    return;
+  }
+
+  if (!accountNumber || accountNumber.length !== 10) {
+    display.innerText = 'Account number must be 10 digits.';
+    display.style.color = 'var(--status-warning)';
+    return;
+  }
+
+  display.innerHTML = `<i class="fa-solid fa-spinner fa-spin" style="color: var(--accent-emerald);"></i> Verifying account with bank...`;
+  display.style.color = 'var(--accent-emerald)';
+
+  try {
+    let { ok, data } = await authFetch('/wallet/withdraw/verify-account', {
+      method: 'POST',
+      body: JSON.stringify({ bankCode, accountNumber })
+    });
+
+    if (!ok || !data?.success) {
+      const fb = await authFetch('/events/withdrawals/verify-account', {
+        method: 'POST',
+        body: JSON.stringify({ bankCode, accountNumber })
+      });
+      if (fb.ok && fb.data?.success) {
+        ok = true;
+        data = fb.data;
+      }
+    }
+
+    if (ok && data?.success && data.accountName) {
+      display.innerText = `✓ ${data.accountName}`;
+      display.style.color = 'var(--accent-emerald)';
+      const refEl = document.getElementById('mainWthNameEnquiryRef');
+      if (refEl) refEl.value = data.nameEnquiryReference || '';
+    } else {
+      display.innerText = `✗ ${data?.message || 'Could not verify account name'}`;
+      display.style.color = 'var(--status-error)';
+      const refEl = document.getElementById('mainWthNameEnquiryRef');
+      if (refEl) refEl.value = '';
+    }
+  } catch (err) {
+    display.innerText = 'Verification network error';
+    display.style.color = 'var(--status-error)';
+  }
+}
+
+async function submitMainWalletWithdrawal() {
+  const amount = parseFloat(document.getElementById('mainWthAmount')?.value);
+  const bankSelect = document.getElementById('mainWthBankSelect');
+  const bankCode = bankSelect?.value;
+  const bankName = bankSelect?.options[bankSelect.selectedIndex]?.getAttribute('data-name') || '';
+  const accountNumber = document.getElementById('mainWthAccountNumber')?.value.trim() || '';
+  const accountName = (document.getElementById('mainWthAccountNameDisplay')?.innerText || '').replace(/^✓\s*/, '').trim();
+  const narration = document.getElementById('mainWthNarration')?.value.trim() || 'Wallet withdrawal';
+  const pin = document.getElementById('mainWthPin')?.value || '';
+  const nameEnquiryRef = document.getElementById('mainWthNameEnquiryRef')?.value || '';
+
+  if (isNaN(amount) || amount < 100) {
+    showToast('Minimum withdrawal amount is ₦100.', 'error');
+    return;
+  }
+
+  if (!bankCode || accountNumber.length !== 10) {
+    showToast('Please select a bank and enter a valid 10-digit account number.', 'error');
+    return;
+  }
+
+  if (!accountName || accountName.includes('verify') || accountName.includes('Could not') || accountName.includes('error')) {
+    showToast('Please verify the destination account owner name before proceeding.', 'error');
+    return;
+  }
+
+  if (!pin || pin.length !== 4) {
+    showToast('Please enter your 4-digit STRICTWALLET Transaction PIN.', 'error');
+    return;
+  }
+
+  // Pre-check balance before sending request
+  const currentBal = parseFloat(State.wallet?.balance || 0);
+  const stampDuty = amount >= 10000 ? 50 : 0;
+  const totalDeduction = amount + 20 + stampDuty;
+  if (currentBal < totalDeduction) {
+    showToast(`Insufficient main wallet balance. Required: ${formatNaira(totalDeduction)}, Available: ${formatNaira(currentBal)}`, 'error');
+    return;
+  }
+
+  const btn = document.getElementById('btnSubmitMainWithdrawal');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Processing Transfer...`;
+  }
+
+  try {
+    const { ok, data } = await authFetch('/wallet/withdraw/request', {
+      method: 'POST',
+      body: JSON.stringify({
+        amount,
+        bankCode,
+        bankName,
+        accountNumber,
+        accountName,
+        narration,
+        nameEnquiryRef,
+        pin
+      })
+    });
+
+    if (ok && data?.success) {
+      showToast(data.message || 'Withdrawal processed successfully!', 'success');
+      closeModal('mainWalletWithdrawModal');
+
+      if (data.newBalance !== undefined && State.wallet) {
+        State.wallet.balance = parseFloat(data.newBalance);
+        updateBalanceDisplay();
+      }
+
+      await loadWalletOverview();
+
+      if (data.transaction) {
+        showReceiptModal(data.transaction);
+      }
+    } else {
+      showToast(data?.message || 'Withdrawal request failed.', 'error');
+      closeModal('mainWalletWithdrawModal');
+
+      if (data?.newBalance !== undefined && State.wallet) {
+        State.wallet.balance = parseFloat(data.newBalance);
+        updateBalanceDisplay();
+      }
+
+      await loadWalletOverview();
+
+      if (data?.transaction) {
+        showReceiptModal(data.transaction);
+      }
+    }
+  } catch (err) {
+    showToast('Error communicating with withdrawal service.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-arrow-up-from-bracket"></i> Confirm Withdrawal`;
+    }
+  }
 }
 
 // -------------------------------------------------------------
@@ -2298,6 +3221,12 @@ function setupEventsModuleListeners() {
     e.preventDefault();
     await submitEventWithdrawal();
   });
+
+  // Main Wallet Withdrawal Form Submission
+  document.getElementById('mainWalletWithdrawForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    await submitMainWalletWithdrawal();
+  });
 }
 
 // -------------------------------------------------------------
@@ -2479,7 +3408,7 @@ async function openEventDetails(slugOrId, preselectTicketTypeId = null, updateUr
   // Ticket Holder field defaults to logged in user's name
   const holderInput = document.getElementById('ticketHolderFullName');
   if (holderInput && State.user && !holderInput.value) {
-    holderInput.value = State.user.fullName;
+    holderInput.value = State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
   }
 
   // Render Available Ticket Types
@@ -2938,7 +3867,7 @@ function initiateTicketPurchase() {
 
   // Populate purchase authorization PIN modal
   const holderInputVal = document.getElementById('ticketHolderFullName').value.trim();
-  const ticketHolder = holderInputVal || State.user.fullName;
+  const ticketHolder = holderInputVal || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
 
   document.getElementById('purModalEventTitle').innerText = State.selectedEvent.title;
   document.getElementById('purModalTicketType').innerText = State.selectedTicketType.name;
@@ -2986,7 +3915,7 @@ function openFundWalletFromTicketPurchase() {
     type: 'event',
     id: State.selectedEvent.slug || State.selectedEvent.id,
     ticketTypeId: State.selectedTicketType.id,
-    ticketHolder: holderInputVal || (State.user ? State.user.fullName : ''),
+    ticketHolder: holderInputVal || (State.user ? (State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim()) : ''),
     returnToPurchase: true
   });
 
@@ -3017,7 +3946,7 @@ async function executeEventTicketPurchase() {
   }
 
   const holderInputVal = document.getElementById('ticketHolderFullName').value.trim();
-  const ticketHolderName = holderInputVal || State.user.fullName;
+  const ticketHolderName = holderInputVal || State.user.fullName || `${State.user.firstName || ''} ${State.user.lastName || ''}`.trim();
 
   const btn = document.getElementById('btnConfirmEventPurchase');
   btn.disabled = true;

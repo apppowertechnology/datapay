@@ -2,80 +2,44 @@
   "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/admin",
-      "destination": "/admin.html"
-    },
-    {
-      "source": "/about",
-      "destination": "/about.html"
-    },
-    {
-      "source": "/services",
-      "destination": "/services.html"
-    },
-    {
-      "source": "/event-ticketing",
-      "destination": "/event-ticketing.html"
-    },
-    {
-      "source": "/data-airtime",
-      "destination": "/data-airtime.html"
-    },
-    {
-      "source": "/pricing",
-      "destination": "/pricing.html"
-    },
-    {
-      "source": "/how-it-works",
-      "destination": "/how-it-works.html"
-    },
-    {
-      "source": "/terms",
-      "destination": "/terms.html"
-    },
-    {
-      "source": "/privacy",
-      "destination": "/privacy.html"
-    },
-    {
-      "source": "/contact",
-      "destination": "/contact.html"
+      "source": "/api/:path*",
+      "destination": "https://datapay.onrender.com/api/:path*"
     },
     {
       "source": "/events",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/events/:path*",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/event",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/event/:path*",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/tickets",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/tickets/:path*",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/ticket",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
       "source": "/ticket/:path*",
-      "destination": "/index.html"
+      "destination": "/index"
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/((?!api/).*)",
+      "destination": "/index"
     }
   ]
 }

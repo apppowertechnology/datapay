@@ -71,7 +71,13 @@ app.use('/api/events', require('./routes/events'));
 app.use('/api/webhook', require('./routes/webhook'));
 app.use('/webhook', require('./routes/webhook')); // Allow webhooks at /webhook or /api/webhook
 app.use('/api/support', require('./routes/support'));
-app.use('/api/admin', require('./routes/admin'));
+const adminRouter = require('./routes/admin');
+app.use('/api/admin', adminRouter);
+// Direct aliases for financial summary to prevent 404 or HTML fallback
+app.get(['/api/financial-summary', '/api/financial_summary', '/admin/financial-summary', '/admin/financial_summary'], (req, res, next) => {
+  req.url = '/financial-summary';
+  adminRouter(req, res, next);
+});
 
 // Public Settings & Active Social Links for Users
 app.get('/api/settings/social-links', async (req, res) => {

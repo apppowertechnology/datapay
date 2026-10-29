@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const { purchaseAirtime, purchaseData } = require('../services/maskawasub');
 const paystackService = require('../services/paystack');
+const strowallet = require('../services/strowallet');
 const { reconcileDepositTransaction } = require('../services/paymentReconciliation');
 const { authenticateToken } = require('../middleware/auth');
 const { sendTransactionalAlert } = require('../services/smsAlertService');
@@ -881,6 +882,246 @@ router.post('/sms/settings', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('[SMS Settings Error]:', err);
     return res.status(500).json({ success: false, message: 'Failed to update SMS alert settings.' });
+  }
+});
+
+// ============================================================
+// 14. MAIN WALLET BANK WITHDRAWAL
+// ============================================================
+
+// A. Get Nigerian Bank Lists (Strowallet API)
+router.get('/withdraw/banks', async (req, res) => {
+  try {
+    const result = await strowallet.getBankLists();
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load bank list.' });
+  }
+});
+
+// B. Verify Nigerian Bank Account Name (Strowallet Name Enquiry API)
+router.post('/withdraw/verify-account', authenticateToken, async (req, res) => {
+  try {
+    const { bankCode, accountNumber } = req.body;
+    if (!bankCode || !accountNumber) {
+      return res.status(400).json({ success: false, message: 'Bank code and account number are required.' });
+    }
+
+    const result = await strowallet.getCustomerName(bankCode, accountNumber.trim());
+    return res.json(result);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to verify account.' });
+  }
+});
+
+// In-flight concurrency lock to prevent duplicate withdrawal processing / double deduction
+const mainWithdrawalLocks = new Set();
+
+// C. Process Main Wallet Withdrawal Request
+router.post('/withdraw/request', authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  if (mainWithdrawalLocks.has(userId)) {
+    return res.status(429).json({
+      success: false,
+      message: 'A withdrawal transaction is currently being processed. Please wait a moment.'
+    });
+  }
+
+  mainWithdrawalLocks.add(userId);
+
+  try {
+    const {
+      amount,
+      bankCode,
+      bankName,
+      accountNumber,
+      accountName,
+      narration,
+      nameEnquiryRef,
+      pin
+    } = req.body;
+
+    const withdrawAmount = parseFloat(amount);
+    if (isNaN(withdrawAmount) || withdrawAmount < 100) {
+      return res.status(400).json({ success: false, message: 'Minimum withdrawal amount is ₦100.' });
+    }
+
+    if (!bankCode || !accountNumber || !accountName) {
+      return res.status(400).json({ success: false, message: 'Destination bank selection and verified account name are required.' });
+    }
+
+    const cleanAccountNum = accountNumber.toString().trim();
+    if (cleanAccountNum.length !== 10) {
+      return res.status(400).json({ success: false, message: 'Bank account number must be exactly 10 digits.' });
+    }
+
+    if (!pin) {
+      return res.status(400).json({ success: false, message: 'STRICTWALLET Transaction PIN is required.' });
+    }
+
+    // Verify User & Transaction PIN
+    const user = await db.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    if (user.status && user.status !== 'active') {
+      return res.status(403).json({ success: false, message: 'Your account is suspended. Please contact customer support.' });
+    }
+
+    if (!user.transactionPinHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please set up your 4-digit Transaction PIN in Settings before withdrawing.'
+      });
+    }
+
+    const isPinValid = await bcrypt.compare(pin.toString(), user.transactionPinHash);
+    if (!isPinValid) {
+      return res.status(400).json({ success: false, message: 'Invalid Transaction PIN.' });
+    }
+
+    // Withdrawal Fee Calculations:
+    // API provider charge = ₦12.00
+    // STRICTWALLET customer charge = ₦20.00
+    // Expected STRICTWALLET gross profit = ₦20.00 - ₦12.00 = ₦8.00 per successful withdrawal
+    // Statutory Stamp duty = ₦50.00 for withdrawals >= ₦10,000 (₦0.00 for < ₦10,000)
+    const charge = 20.00;
+    const providerFee = 12.00;
+    const stampDuty = withdrawAmount >= 10000 ? 50.00 : 0.00;
+    const profit = Math.round((charge - providerFee) * 100) / 100; // Exactly ₦8.00 profit
+    const totalDeduction = Math.round((withdrawAmount + charge + stampDuty) * 100) / 100;
+
+    // Check Available Main Wallet Balance
+    const availableBalance = parseFloat(user.walletBalance || 0);
+    if (availableBalance < totalDeduction) {
+      const feeDetails = stampDuty > 0
+        ? 'including ₦20.00 withdrawal fee and ₦50.00 stamp duty'
+        : 'including ₦20.00 withdrawal fee';
+      return res.status(400).json({
+        success: false,
+        message: `Insufficient main wallet balance. Available: ₦${availableBalance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}, Required (${feeDetails}): ₦${totalDeduction.toLocaleString('en-NG', { minimumFractionDigits: 2 })}.`
+      });
+    }
+
+    // 1. Temporarily Debit Main Wallet with safe transaction state
+    user.walletBalance = Math.round((availableBalance - totalDeduction) * 100) / 100;
+    await db.saveUser(user);
+
+    const txId = `WTH-WAL-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const cleanNarration = (narration && narration.trim()) || 'Main wallet withdrawal';
+
+    const withdrawalTx = {
+      id: txId,
+      userId: user.id,
+      userFullName: user.fullName,
+      userEmail: user.email,
+      type: 'withdrawal',
+      amount: withdrawAmount,
+      charge: charge,
+      stampDuty: stampDuty,
+      providerFee: providerFee,
+      profit: 0, // only credited upon confirmed success
+      totalDeducted: totalDeduction,
+      bankCode: bankCode,
+      bankName: bankName || 'Bank',
+      accountNumber: cleanAccountNum,
+      accountName: accountName.trim(),
+      narration: cleanNarration,
+      nameEnquiryReference: nameEnquiryRef || `NER-${Date.now()}`,
+      providerReference: null,
+      status: 'Processing',
+      balanceBefore: availableBalance,
+      balanceAfter: user.walletBalance,
+      description: `Withdrawal of ₦${withdrawAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })} to ${bankName || 'Bank'} (${cleanAccountNum.slice(-4)})`,
+      createdAt: new Date().toISOString()
+    };
+
+    await db.createTransaction(withdrawalTx);
+
+    // 2. Execute Transfer via Strowallet Bank Transfer API
+    const transferResult = await strowallet.requestBankTransfer({
+      amount: withdrawAmount,
+      bankCode,
+      accountNumber: cleanAccountNum,
+      narration: cleanNarration,
+      nameEnquiryRef: withdrawalTx.nameEnquiryReference,
+      senderName: 'STRICTWALLET'
+    });
+
+    if (transferResult.success) {
+      // Transfer Succeeded!
+      withdrawalTx.status = 'Successful';
+      withdrawalTx.providerReference = transferResult.reference;
+      withdrawalTx.profit = profit;
+      await db.updateTransaction(withdrawalTx.id, withdrawalTx);
+
+      // Trigger Transactional SMS Debit Alert asynchronously if enabled
+      sendTransactionalAlert({
+        userId: user.id,
+        alertType: 'debit',
+        amount: withdrawAmount,
+        userBalance: user.walletBalance,
+        balanceType: 'main',
+        desc: `Debited ₦${withdrawAmount}`,
+        reference: withdrawalTx.id,
+        transactionType: 'withdrawal'
+      }).catch(err => console.error('[Main Wallet Withdrawal SMS Alert Error]:', err.message));
+
+      return res.json({
+        success: true,
+        message: `Withdrawal of ₦${withdrawAmount.toLocaleString('en-NG', { minimumFractionDigits: 2 })} transferred successfully!`,
+        transaction: withdrawalTx,
+        newBalance: user.walletBalance
+      });
+    } else if (transferResult.status === 'Pending' || transferResult.status === 'Processing') {
+      // Transfer Pending / Processing at Provider
+      withdrawalTx.status = transferResult.status;
+      withdrawalTx.providerReference = transferResult.reference;
+      await db.updateTransaction(withdrawalTx.id, withdrawalTx);
+
+      return res.json({
+        success: true,
+        message: `Withdrawal submitted and currently ${transferResult.status.toLowerCase()} with provider.`,
+        transaction: withdrawalTx,
+        newBalance: user.walletBalance
+      });
+    } else {
+      // Transfer Failed at Provider: Restore Main Wallet Balance Immediately
+      user.walletBalance = Math.round((parseFloat(user.walletBalance) + totalDeduction) * 100) / 100;
+      await db.saveUser(user);
+
+      withdrawalTx.status = 'Failed';
+      withdrawalTx.profit = 0;
+      withdrawalTx.failureReason = transferResult.message || 'Transfer failed at bank provider';
+      withdrawalTx.balanceAfter = user.walletBalance;
+      await db.updateTransaction(withdrawalTx.id, withdrawalTx);
+
+      return res.status(502).json({
+        success: false,
+        message: `Transfer failed: ${transferResult.message || 'Bank network error'}. Your wallet balance has been restored.`,
+        transaction: withdrawalTx,
+        newBalance: user.walletBalance
+      });
+    }
+  } catch (error) {
+    console.error('[Main Wallet Withdrawal Request Error]:', error);
+    return res.status(500).json({ success: false, message: 'An error occurred while processing withdrawal.' });
+  } finally {
+    mainWithdrawalLocks.delete(userId);
+  }
+});
+
+// D. Get Single Transaction by ID
+router.get('/transactions/:id', authenticateToken, async (req, res) => {
+  try {
+    const tx = await db.getTransactionById(req.params.id);
+    if (!tx || (tx.userId !== req.user.id && req.user.role !== 'admin')) {
+      return res.status(404).json({ success: false, message: 'Transaction not found.' });
+    }
+    return res.json({ success: true, transaction: tx });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to load transaction.' });
   }
 });
 

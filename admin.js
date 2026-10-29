@@ -10,7 +10,9 @@ const AdminState = {
   chartInstance: null,
   selectedUserForAdj: null,
   selectedPlanForEdit: null,
-  activeAdminTicketId: null
+  activeAdminTicketId: null,
+  financialData: null,
+  financialTimeframe: 'allTime'
 };
 
 // API Base URL (Relative /api for local development & same-origin production)
@@ -154,6 +156,7 @@ function navigateAdminView(viewId) {
 
   const titles = {
     viewAdminOverview: 'Overview & Analytics',
+    viewAdminFinancialSummary: 'Financial Summary & Total Profit',
     viewAdminUsers: 'User Management',
     viewAdminTransactions: 'Master Transaction Ledger',
     viewAdminDeposits: 'Payments & Paystack Deposits Management',
@@ -161,11 +164,13 @@ function navigateAdminView(viewId) {
     viewAdminPricing: 'Pricing & Profit Matrix',
     viewAdminSupport: 'Support Desk & Tickets',
     viewAdminLogs: 'Administrative Audit Trail',
-    viewAdminSocial: 'Social Media & Community Channels'
+    viewAdminSocial: 'Social Media & Community Channels',
+    viewAdminSms: 'SMS Alert Revenue & Audit'
   };
   document.getElementById('adminPageHeadline').innerText = titles[viewId] || 'Admin Console';
 
   if (viewId === 'viewAdminOverview') loadAdminOverview();
+  if (viewId === 'viewAdminFinancialSummary') loadAdminFinancialSummary();
   if (viewId === 'viewAdminUsers') loadAdminUsers();
   if (viewId === 'viewAdminTransactions') loadAdminTransactions();
   if (viewId === 'viewAdminDeposits') loadAdminDeposits();
@@ -174,6 +179,7 @@ function navigateAdminView(viewId) {
   if (viewId === 'viewAdminSupport') loadAdminSupportTickets();
   if (viewId === 'viewAdminLogs') loadAdminAuditLogs();
   if (viewId === 'viewAdminSocial') loadAdminSocialLinks();
+  if (viewId === 'viewAdminSms') loadAdminSmsRevenue();
 }
 
 // -------------------------------------------------------------
@@ -271,6 +277,32 @@ function setupAdminEventListeners() {
   document.getElementById('adminDepositTableSearch')?.addEventListener('input', debounce(loadAdminDeposits, 300));
   document.getElementById('adminDepositTableStatus')?.addEventListener('change', loadAdminDeposits);
   document.getElementById('btnRefreshAdminDeposits')?.addEventListener('click', loadAdminDeposits);
+
+  // Financial Summary Listeners
+  document.querySelectorAll('#financialTimeframePills button[data-timeframe]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const timeframe = btn.getAttribute('data-timeframe');
+      document.querySelectorAll('#financialTimeframePills button[data-timeframe]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (!AdminState.financialData) {
+        loadAdminFinancialSummary(timeframe);
+      } else {
+        renderFinancialSummaryForTimeframe(timeframe);
+      }
+    });
+  });
+
+  document.getElementById('btnRefreshFinancialSummary')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnRefreshFinancialSummary');
+    const icon = btn?.querySelector('i');
+    if (icon) icon.classList.add('fa-spin');
+    try {
+      await loadAdminFinancialSummary(AdminState.financialTimeframe || 'allTime', true);
+      showAdminToast('Financial ledger refreshed from live transactions', 'info');
+    } finally {
+      if (icon) icon.classList.remove('fa-spin');
+    }
+  });
 
   document.getElementById('btnAdminDepositLookup')?.addEventListener('click', () => {
     const q = document.getElementById('adminDepositLookupInput')?.value.trim();
@@ -571,19 +603,221 @@ async function loadAdminOverview() {
   const s = data.stats;
   AdminState.stats = s;
 
-  document.getElementById('statAdminTotalUsers').innerText = s.totalUsers.toLocaleString();
-  document.getElementById('statAdminTotalDeposits').innerText = formatNaira(s.totalDeposits);
-  document.getElementById('statAdminTotalRevenue').innerText = formatNaira(s.totalRevenue);
-  document.getElementById('statAdminTotalProfit').innerText = formatNaira(s.totalProfit);
+  // Master Overview KPI Cards
+  const elUsers = document.getElementById('statAdminTotalUsers');
+  if (elUsers) elUsers.innerText = (s.totalUsers || 0).toLocaleString();
 
-  document.getElementById('statAdminAirtimeSales').innerText = formatNaira(s.totalAirtimeSales);
-  document.getElementById('statAdminDataSales').innerText = formatNaira(s.totalDataSales);
-  document.getElementById('statAdminTotalTx').innerText = s.totalTransactions.toLocaleString();
-  document.getElementById('statAdminOpenTickets').innerText = s.openTickets.toLocaleString();
+  const elPlatVol = document.getElementById('statAdminTotalPlatformVolume');
+  if (elPlatVol) elPlatVol.innerText = formatNaira(s.totalPlatformVolume || 0);
+
+  const elRev = document.getElementById('statAdminTotalRevenue');
+  if (elRev) elRev.innerText = formatNaira(s.totalRevenue || 0);
+
+  const elProfit = document.getElementById('statAdminTotalProfit');
+  if (elProfit) elProfit.innerText = formatNaira(s.totalProfit || 0);
+
+  // Secondary Cards
+  const elAirSales = document.getElementById('statAdminAirtimeSales');
+  if (elAirSales) elAirSales.innerText = formatNaira(s.totalAirtimeSales || 0);
+
+  const elAirProfit = document.getElementById('statAdminAirtimeProfit');
+  if (elAirProfit) elAirProfit.innerText = `+${formatNaira(s.totalAirtimeProfit || 0)}`;
+
+  const elDataSales = document.getElementById('statAdminDataSales');
+  if (elDataSales) elDataSales.innerText = formatNaira(s.totalDataSales || 0);
+
+  const elDataProfit = document.getElementById('statAdminDataProfit');
+  if (elDataProfit) elDataProfit.innerText = `+${formatNaira(s.totalDataProfit || 0)}`;
+
+  const elDeposits = document.getElementById('statAdminTotalDeposits');
+  if (elDeposits) elDeposits.innerText = formatNaira(s.totalDeposits || 0);
+
+  const elDepCharges = document.getElementById('statAdminDepositCharges');
+  if (elDepCharges) elDepCharges.innerText = formatNaira(s.totalDepositCharges || 0);
+
+  const elTx = document.getElementById('statAdminTotalTx');
+  if (elTx) elTx.innerText = (s.totalTransactions || 0).toLocaleString();
+
+  const elTickets = document.getElementById('statAdminOpenTickets');
+  if (elTickets) elTickets.innerText = (s.openTickets || 0).toLocaleString();
+
+  // REQUIREMENT 2: DASHBOARD SMS FINANCIAL SUMMARY (Visible directly on main dashboard)
+  const sms = data.smsSummary || {};
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
+
+  setEl('dashSmsTotalProcessed', (sms.totalProcessed || 0).toLocaleString());
+  setEl('dashSmsDelivered', (sms.successfullyDelivered || sms.totalDelivered || 0).toLocaleString());
+  setEl('dashSmsFailed', (sms.failedUncharged || sms.totalFailed || 0).toLocaleString());
+  setEl('dashSmsCharged', (sms.totalChargedToCustomers || sms.totalCharged || 0).toLocaleString());
+  setEl('dashSmsRevenue', formatNaira(sms.revenue || 0));
+  setEl('dashSmsExpenses', formatNaira(sms.expenses || 0));
+  setEl('dashSmsProfit', `+${formatNaira(sms.grossProfit || 0)}`);
+
+  setEl('dashSmsDailyProfit', `+${formatNaira(sms.dailyProfit || 0)}`);
+  setEl('dashSmsWeeklyProfit', `+${formatNaira(sms.weeklyProfit || 0)}`);
+  setEl('dashSmsMonthlyProfit', `+${formatNaira(sms.monthlyProfit || 0)}`);
+  setEl('dashSmsAllTimeProfit', `+${formatNaira(sms.allTimeProfit || 0)}`);
 
   // Render Chart
   renderAdminChart(data.chartData || []);
 }
+
+// -------------------------------------------------------------
+// 1B. FINANCIAL SUMMARY & TOTAL PROFIT LEDGER (REQUIREMENT 1)
+// -------------------------------------------------------------
+window.loadAdminFinancialSummary = async function(selectedTimeframe = 'allTime', forceRefresh = false) {
+  const refreshBtn = document.getElementById('btnRefreshFinancialSummary');
+  const refreshIcon = refreshBtn?.querySelector('i');
+  if (refreshIcon) refreshIcon.classList.add('fa-spin');
+
+  try {
+    if (forceRefresh || !AdminState.financialData) {
+      const { ok, data } = await adminFetch('/admin/financial-summary');
+      if (!ok || !data.success) {
+        showAdminToast(data?.message || 'Failed to load financial ledger data.', 'error');
+        return;
+      }
+      AdminState.financialData = data;
+    }
+
+    AdminState.financialTimeframe = selectedTimeframe;
+
+    // Sync button active state
+    document.querySelectorAll('#financialTimeframePills button[data-timeframe]').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-timeframe') === selectedTimeframe);
+    });
+
+    renderFinancialSummaryForTimeframe(selectedTimeframe);
+  } finally {
+    if (refreshIcon) refreshIcon.classList.remove('fa-spin');
+  }
+};
+
+function renderFinancialSummaryForTimeframe(timeframe = 'allTime') {
+  const fin = AdminState.financialData;
+  if (!fin) return;
+
+  AdminState.financialTimeframe = timeframe;
+  const period = fin[timeframe] || fin.allTime;
+  if (!period) return;
+
+  const s = period.services || {};
+  const allTimePeriod = fin.allTime || period;
+  const allS = allTimePeriod.services || {};
+
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = val;
+  };
+
+  // 1. Master Totals Grid (4 High-Level Cards)
+  setVal('finStatTotalRevenue', formatNaira(period.totalRevenue || 0));
+  setVal('finStatTotalExpenses', formatNaira(period.totalExpenses || 0));
+  setVal('finStatTotalGrossProfit', formatNaira(period.totalGrossProfit || 0));
+  setVal('finStatTotalNetProfit', formatNaira(period.totalNetProfit || 0));
+
+  // 2. Individual Service Profits Summary
+  setVal('finStatAirtimeProfit', `+${formatNaira(s.airtime?.grossProfit || 0)}`);
+  setVal('finStatAirtimeVolume', formatNaira(s.airtime?.volume || 0));
+
+  setVal('finStatDataProfit', `+${formatNaira(s.data?.grossProfit || 0)}`);
+  setVal('finStatDataVolume', formatNaira(s.data?.volume || 0));
+
+  setVal('finStatDepositCharges', formatNaira(s.deposits?.applicableChargesCollected || 0));
+  setVal('finStatDepositProfit', `+${formatNaira(s.deposits?.depositProfit || 0)}`);
+
+  setVal('finStatWithdrawalProfit', `+${formatNaira(s.withdrawals?.withdrawalProfit || 0)}`);
+
+  setVal('finStatSmsProfit', `+${formatNaira(s.sms?.grossProfit || 0)}`);
+  setVal('finStatSmsRevenue', formatNaira(s.sms?.revenue || 0));
+
+  setVal('finStatEventProfit', `+${formatNaira(s.events?.eventProfit || s.events?.commissionRevenue || s.events?.commissionProfit || 0)}`);
+
+  // 3. Platform Volume vs Customer Funds Under Management
+  setVal('finStatPlatformVolume', formatNaira(period.totalPlatformVolume || 0));
+  setVal('finStatNetCustomerCredits', formatNaira(s.deposits?.netAmountsCredited || 0));
+
+  // 4. SMS Deep-Dive Table (Selected Period & All-Time)
+  setVal('finSmsPeriodProcessed', (s.sms?.totalProcessed || 0).toLocaleString());
+  setVal('finSmsPeriodDelivered', (s.sms?.successfullyDelivered || s.sms?.totalDelivered || 0).toLocaleString());
+  setVal('finSmsPeriodFailed', (s.sms?.failedUncharged || s.sms?.totalFailed || 0).toLocaleString());
+  setVal('finSmsPeriodCharged', (s.sms?.totalChargedToCustomers || s.sms?.totalCharged || 0).toLocaleString());
+  setVal('finSmsPeriodRevenue', formatNaira(s.sms?.revenue || 0));
+  setVal('finSmsPeriodExpenses', formatNaira(s.sms?.expenses || 0));
+  setVal('finSmsPeriodProfit', `+${formatNaira(s.sms?.grossProfit || 0)}`);
+
+  const smsAll = allS.sms || {};
+  setVal('finSmsAllProcessed', (smsAll.totalProcessed || 0).toLocaleString());
+  setVal('finSmsAllDelivered', (smsAll.successfullyDelivered || smsAll.totalDelivered || 0).toLocaleString());
+  setVal('finSmsAllFailed', (smsAll.failedUncharged || smsAll.totalFailed || 0).toLocaleString());
+  setVal('finSmsAllCharged', (smsAll.totalChargedToCustomers || smsAll.totalCharged || 0).toLocaleString());
+  setVal('finSmsAllRevenue', formatNaira(smsAll.revenue || 0));
+  setVal('finSmsAllExpenses', formatNaira(smsAll.expenses || 0));
+  setVal('finSmsAllProfit', `+${formatNaira(smsAll.grossProfit || 0)}`);
+
+  // 5. Bank Withdrawal Economics
+  const wth = s.withdrawals || {};
+  setVal('finWthVolume', formatNaira(wth.totalVolume || 0));
+  setVal('finWthSuccCount', (wth.successfulCount || wth.successfulWithdrawals || 0).toLocaleString());
+  setVal('finWthCharges', formatNaira(wth.customerChargesCollected || wth.withdrawalChargesCollected || 0));
+  setVal('finWthCost', formatNaira(wth.apiCosts || wth.apiProviderCost || 0));
+  setVal('finWthProfit', `+${formatNaira(wth.withdrawalProfit || 0)}`);
+
+  setVal('finWthStatusSucc', `${(wth.successfulCount || wth.successfulWithdrawals || 0).toLocaleString()} (${formatNaira(wth.totalVolume || 0)})`);
+  setVal('finWthStatusPending', `${(wth.pendingCount || 0).toLocaleString()} (${formatNaira(wth.pendingVolume || 0)})`);
+  setVal('finWthStatusFailed', `${(wth.failedCount || 0).toLocaleString()} (${formatNaira(wth.failedVolume || 0)})`);
+  setVal('finWthStatusReversed', `${(wth.reversedCount || 0).toLocaleString()} (${formatNaira(wth.reversedVolume || 0)})`);
+
+  // 6. Deposits & Virtual Account Charges
+  const dep = s.deposits || {};
+  setVal('finDepGrossVolume', formatNaira(dep.incomingDepositVolume || 0));
+  setVal('finDepSuccCount', (dep.successfulDepositsCount || dep.successfulDeposits || 0).toLocaleString());
+  setVal('finDepNetCredited', formatNaira(dep.netAmountsCredited || 0));
+  setVal('finDepCharges', formatNaira(dep.applicableChargesCollected || 0));
+  setVal('finDepProfit', `+${formatNaira(dep.depositProfit || 0)}`);
+
+  setVal('finDepStatusPending', `${(dep.pendingCount || 0).toLocaleString()} (${formatNaira(dep.pendingVolume || 0)})`);
+  setVal('finDepStatusFailed', `${(dep.failedCount || 0).toLocaleString()} (${formatNaira(dep.failedVolume || 0)})`);
+  setVal('finDepStatusCancelled', `${(dep.reversedCount || 0).toLocaleString()} (${formatNaira(dep.reversedVolume || 0)})`);
+
+  // 7. Airtime & Data VTU Reselling Table
+  const air = s.airtime || {};
+  setVal('finAirtimeCount', (air.successfulTransactions || air.successfulCount || 0).toLocaleString());
+  setVal('finAirtimeVolumeTable', formatNaira(air.volume || 0));
+  setVal('finAirtimeCostTable', formatNaira(air.cost || air.expenses || 0));
+  setVal('finAirtimeProfitTable', `+${formatNaira(air.grossProfit || 0)}`);
+
+  const dat = s.data || {};
+  setVal('finDataCount', (dat.successfulTransactions || dat.successfulCount || 0).toLocaleString());
+  setVal('finDataVolumeTable', formatNaira(dat.volume || 0));
+  setVal('finDataCostTable', formatNaira(dat.cost || dat.expenses || 0));
+  setVal('finDataProfitTable', `+${formatNaira(dat.grossProfit || 0)}`);
+
+  // 8. Event Ticketing & Creator Services
+  const ev = s.events || {};
+  setVal('finEvGrossSales', formatNaira(ev.grossTicketSales || 0));
+  setVal('finEvTicketsSold', (ev.totalTicketsSold || 0).toLocaleString());
+  setVal('finEvCreatorEarnings', formatNaira(ev.creatorEarningsLiability || 0));
+  setVal('finEvCommissionProfit', `+${formatNaira(ev.commissionProfit || ev.commissionRevenue || ev.eventProfit || 0)}`);
+
+  // 9. Master Reconciliation Audit Badge
+  const badgeEl = document.getElementById('finReconciliationBadge');
+  if (badgeEl) {
+    if (period.reconciles) {
+      badgeEl.className = 'badge badge-success';
+      badgeEl.innerHTML = '<i class="fa-solid fa-check-double"></i> 100% RECONCILED';
+      badgeEl.style.padding = '6px 14px';
+    } else {
+      badgeEl.className = 'badge badge-danger';
+      badgeEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> Discrepancy (${formatNaira(period.discrepancy || 0)})`;
+      badgeEl.style.padding = '6px 14px';
+    }
+  }
+}
+window.renderFinancialSummaryForTimeframe = renderFinancialSummaryForTimeframe;
 
 function renderAdminChart(chartData) {
   const ctx = document.getElementById('adminSalesChart');
@@ -676,7 +910,7 @@ async function loadAdminUsers() {
           </td>
           <td>${u.phone || '-'}</td>
           <td>
-            <strong style="color: var(--accent-blue-light); font-size: 0.82rem;">${u.virtualBankName || 'Nombank MFB'}</strong>
+            <strong style="color: var(--accent-blue-light); font-size: 0.82rem;">${u.virtualBankName || 'Sterling Bank'}</strong>
             <div style="font-family: var(--font-mono); color: #FFF;">${u.virtualAccountNumber || 'Not Generated'}</div>
           </td>
           <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-emerald);">
@@ -1497,6 +1731,92 @@ window.reconcileAdminDeposit = async function(reference) {
   } catch (err) {
     console.error('reconcileAdminDeposit Error:', err);
     showAdminToast('Error during reconciliation: ' + err.message, 'error');
+  }
+};
+
+// -------------------------------------------------------------
+// SMS ALERT REVENUE & AUDIT LEDGER
+// -------------------------------------------------------------
+function escapeAdminHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.appendChild(document.createTextNode(str));
+  return div.innerHTML;
+}
+
+window.loadAdminSmsRevenue = async function() {
+  const tbody = document.getElementById('admSmsTableBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading SMS revenue and audit records...</td></tr>';
+  }
+
+  try {
+    const { ok, data } = await adminFetch('/admin/sms-revenue');
+    if (!ok || !data.success) {
+      showAdminToast(data?.message || 'Failed to fetch SMS revenue records.', 'error');
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--status-error);">${escapeAdminHtml(data?.message || 'Failed to load SMS audit records.')}</td></tr>`;
+      }
+      return;
+    }
+
+    const { summary, alerts } = data;
+
+    // Update metric cards
+    const totalSentEl = document.getElementById('admSmsTotalSent');
+    const totalRevEl = document.getElementById('admSmsTotalRevenue');
+    const totalCostEl = document.getElementById('admSmsTotalCost');
+    const totalProfitEl = document.getElementById('admSmsTotalProfit');
+
+    if (totalSentEl) totalSentEl.innerText = (summary?.totalSmsSent || 0).toLocaleString();
+    if (totalRevEl) totalRevEl.innerText = formatNaira(summary?.totalSmsRevenue || 0);
+    if (totalCostEl) totalCostEl.innerText = formatNaira(summary?.totalProviderCost || 0);
+    if (totalProfitEl) totalProfitEl.innerText = formatNaira(summary?.totalGrossProfit || 0);
+
+    if (!alerts || alerts.length === 0) {
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--text-muted);">No transactional SMS alerts recorded in the system yet.</td></tr>';
+      }
+      return;
+    }
+
+    if (tbody) {
+      tbody.innerHTML = alerts.map(a => {
+        const isSuccess = a.status === 'sent';
+        const statusBadge = isSuccess
+          ? '<span class="badge badge-success"><i class="fa-solid fa-check"></i> Sent</span>'
+          : `<span class="badge badge-danger">${escapeAdminHtml(a.status || 'Failed')}</span>`;
+
+        const typeBadge = a.alertType === 'credit'
+          ? '<span class="badge" style="background: rgba(0, 208, 156, 0.15); color: #00D09C;"><i class="fa-solid fa-arrow-down"></i> Credit</span>'
+          : '<span class="badge" style="background: rgba(239, 68, 68, 0.15); color: #f87171;"><i class="fa-solid fa-arrow-up"></i> Debit</span>';
+
+        return `
+          <tr>
+            <td style="font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;">
+              ${escapeAdminHtml(a.reference || a.id || '-')}
+            </td>
+            <td>
+              <div style="font-weight: 600; color: #FFF;">${escapeAdminHtml(a.userPhone || a.phone || '-')}</div>
+              <div style="font-size: 0.72rem; color: var(--text-muted);">User: ${escapeAdminHtml(a.userId || '-')}</div>
+            </td>
+            <td>${typeBadge}</td>
+            <td style="font-family: var(--font-mono); font-weight: 600;">${formatNaira(a.amount || 0)}</td>
+            <td style="font-family: var(--font-mono);">${formatNaira(a.userBalance || 0)}</td>
+            <td style="font-family: var(--font-mono); color: var(--accent-emerald); font-weight: 700;">${formatNaira(a.customerCharge || 0)}</td>
+            <td style="font-family: var(--font-mono); color: #f87171;">${formatNaira(a.providerCost || 0)}</td>
+            <td style="font-family: var(--font-mono); color: #60a5fa; font-weight: 700;">+${formatNaira(a.grossProfit || 0)}</td>
+            <td>${statusBadge}</td>
+            <td style="font-size: 0.8rem; color: var(--text-muted);">${formatDateTime(a.createdAt)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+  } catch (err) {
+    console.error('loadAdminSmsRevenue Error:', err);
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; padding: 24px; color: var(--status-error);">Connection error loading SMS records.</td></tr>';
+    }
   }
 };
 
